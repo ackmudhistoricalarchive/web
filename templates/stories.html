@@ -1,0 +1,114 @@
+<h1>Tales from the Age of Monuments</h1>
+<p class='muted'>Four stories from the pivotal events that shaped the world — drawn from the historical record.</p>
+
+<style>
+.story-card{
+  background:var(--bg-card);
+  border:1px solid var(--line);
+  border-radius:var(--radius-lg);
+  margin:1.25rem 0;
+  overflow:hidden;
+  transition:border-color .2s,box-shadow .2s;
+}
+.story-card:hover{
+  border-color:var(--line-bright);
+  box-shadow:0 0 24px rgba(91,156,246,.08);
+}
+.story-header{
+  padding:1.25rem 1.4rem 1rem;
+  cursor:pointer;
+  user-select:none;
+  display:flex;
+  align-items:flex-start;
+  gap:1rem;
+}
+.story-header:hover .story-toggle{color:var(--accent-bright);}
+.story-era{
+  font-size:.75rem;
+  font-weight:600;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:var(--accent);
+  margin-bottom:.3rem;
+}
+.story-title{
+  font-size:1.15rem;
+  font-weight:700;
+  color:#eef2ff;
+  margin-bottom:.45rem;
+  line-height:1.25;
+}
+.story-teaser{
+  color:var(--muted);
+  font-size:.91rem;
+  font-style:italic;
+  line-height:1.5;
+}
+.story-toggle{
+  margin-left:auto;
+  font-size:1.3rem;
+  color:var(--muted-dim);
+  flex-shrink:0;
+  transition:transform .25s,color .18s;
+  padding-top:.1rem;
+}
+.story-body{
+  max-height:0;
+  overflow:hidden;
+  transition:max-height .4s ease,padding .3s ease;
+}
+.story-body.open{
+  max-height:9999px;
+}
+.story-text{
+  padding:.25rem 1.4rem 1.5rem;
+  border-top:1px solid var(--line);
+}
+.story-text p{
+  margin:.8rem 0;
+  font-size:.96rem;
+  line-height:1.75;
+  color:var(--text);
+}
+.story-text p:first-child{margin-top:.85rem;}
+.story-text .drop-cap::first-letter{
+  float:left;
+  font-size:3.4rem;
+  font-weight:700;
+  line-height:.85;
+  margin:.06em .1em -.06em 0;
+  color:var(--accent-bright);
+}
+.read-btn{
+  display:inline-block;
+  margin-top:.55rem;
+  padding:.3rem .75rem;
+  background:var(--accent-dim);
+  border:1px solid var(--line);
+  border-radius:999px;
+  font-size:.8rem;
+  font-weight:600;
+  color:var(--accent-bright);
+  letter-spacing:.03em;
+  cursor:pointer;
+  transition:background .18s,border-color .18s;
+}
+.story-header:hover .read-btn{
+  background:rgba(91,156,246,.18);
+  border-color:var(--line-bright);
+}
+.story-card.expanded .story-toggle{transform:rotate(180deg);}
+</style>
+
+<script>
+function toggleStory(id) {
+  var card = document.getElementById(id);
+  var body = card.querySelector('.story-body');
+  var btn  = card.querySelector('.read-btn');
+  var open = body.classList.toggle('open');
+  card.classList.toggle('expanded', open);
+  btn.textContent = open ? 'Close story' : 'Read story';
+}
+</script>
+
+__STORIES__

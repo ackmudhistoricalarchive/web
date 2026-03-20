@@ -1,0 +1,277 @@
+<div id='mud-client-container'>
+<h1>ACKMUD Web Client</h1>
+<p class='muted'>Select a world and press Connect.</p>
+<div class='mud-controls'>
+  <label for='world-select'>World</label>
+  <select id='world-select'>__WORLD_OPTIONS__</select>
+  <button id='connect-btn' type='button'>Connect</button>
+  <button id='disconnect-btn' type='button'>Disconnect</button>
+  <button id='fullscreen-btn' type='button' style='margin-left:auto'>&#x26F6; Fullscreen</button>
+</div>
+<pre id='mud-output' class='mud-output'>Ready.</pre>
+<div class='mud-controls'>
+  <input id='mud-command' placeholder='Type a command and press Enter' style='flex:1;min-width:280px;'>
+  <button id='send-btn' type='button'>Send</button>
+</div>
+<div id='music-controls' class='mud-controls' style='display:none;align-items:center;gap:8px;flex-wrap:wrap;'>
+  <span style='opacity:0.7;font-size:0.85em;'>&#9835; Music:</span>
+  <button id='music-play-btn' type='button'>&#9654; Play</button>
+  <button id='music-stop-btn' type='button'>&#9646;&#9646; Stop</button>
+  <label style='display:flex;align-items:center;gap:4px;font-size:0.85em;'>
+    Vol
+    <input id='music-volume' type='range' min='0' max='1' step='0.05' value='0.5' style='width:80px;'>
+  </label>
+  <label style='display:flex;align-items:center;gap:4px;font-size:0.85em;cursor:pointer;'>
+    <input id='music-loop' type='checkbox' checked>
+    Loop
+  </label>
+</div>
+<audio id='mud-audio'></audio>
+<audio id='mud-audio-next'></audio>
+</div>
+<script>
+(() => {
+  const worldSelect = document.getElementById('world-select');
+  const connectBtn = document.getElementById('connect-btn');
+  const disconnectBtn = document.getElementById('disconnect-btn');
+  const commandInput = document.getElementById('mud-command');
+  const sendBtn = document.getElementById('send-btn');
+  const output = document.getElementById('mud-output');
+  const fullscreenBtn = document.getElementById('fullscreen-btn');
+  const container = document.getElementById('mud-client-container');
+  const musicControls = document.getElementById('music-controls');
+  const musicPlayBtn = document.getElementById('music-play-btn');
+  const musicStopBtn = document.getElementById('music-stop-btn');
+  const musicVolume = document.getElementById('music-volume');
+  const musicLoop = document.getElementById('music-loop');
+  const audio = document.getElementById('mud-audio');
+  const audioNext = document.getElementById('mud-audio-next');
+  let socket = null;
+  let fadeTimer = null;
+
+  audio.volume = parseFloat(musicVolume.value);
+  audio.loop = musicLoop.checked;
+
+  musicPlayBtn.addEventListener('click', () => audio.play());
+  musicStopBtn.addEventListener('click', () => {
+    if (fadeTimer) { clearInterval(fadeTimer); fadeTimer = null; }
+    audio.pause(); audio.currentTime = 0;
+    audioNext.pause(); audioNext.src = '';
+  });
+  musicVolume.addEventListener('input', () => { audio.volume = parseFloat(musicVolume.value); });
+  musicLoop.addEventListener('change', () => { audio.loop = musicLoop.checked; audioNext.loop = musicLoop.checked; });
+
+  fullscreenBtn.addEventListener('click', () => {
+    const isFullscreen = container.classList.toggle('mud-fullscreen');
+    document.body.classList.toggle('mud-fullscreen-active', isFullscreen);
+    fullscreenBtn.textContent = isFullscreen ? '\u2715 Exit Fullscreen' : '\u26F6 Fullscreen';
+    output.scrollTop = output.scrollHeight;
+  });
+
+  const ANSI_COLORS = {
+    30: '#222222', 31: '#ff5f56', 32: '#27c93f', 33: '#ffbd2e',
+    34: '#61afef', 35: '#c678dd', 36: '#56b6c2', 37: '#d7dae0',
+    90: '#7f848e', 91: '#ff7b72', 92: '#3fb950', 93: '#e3b341',
+    94: '#79c0ff', 95: '#d2a8ff', 96: '#a5f3fc', 97: '#f0f6fc'
+  };
+
+  const escapeHtml = (value) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  const ansiToHtml = (text) => {
+    const chunks = text.split(/(\x1b\[[0-9;]*m)/g);
+    let styles = { fg: '', bg: '', bold: false, underline: false };
+    let html = '';
+    const styleText = () => {
+      const entries = [];
+      if (styles.fg) entries.push(`color:${styles.fg}`);
+      if (styles.bg) entries.push(`background:${styles.bg}`);
+      if (styles.bold) entries.push('font-weight:700');
+      if (styles.underline) entries.push('text-decoration:underline');
+      return entries.length ? ` style="${entries.join(';')}"` : '';
+    };
+
+    for (const chunk of chunks) {
+      const match = chunk.match(/^\x1b\[([0-9;]*)m$/);
+      if (!match) {
+        if (chunk.length) html += `<span${styleText()}>${escapeHtml(chunk)}</span>`;
+        continue;
+      }
+      const codes = match[1] ? match[1].split(';').map(Number) : [0];
+      for (const code of codes) {
+        if (code === 0) styles = { fg: '', bg: '', bold: false, underline: false };
+        else if (code === 1) styles.bold = true;
+        else if (code === 22) styles.bold = false;
+        else if (code === 4) styles.underline = true;
+        else if (code === 24) styles.underline = false;
+        else if (code === 39) styles.fg = '';
+        else if (code === 49) styles.bg = '';
+        else if (ANSI_COLORS[code]) styles.fg = ANSI_COLORS[code];
+        else if (ANSI_COLORS[code - 10]) styles.bg = ANSI_COLORS[code - 10];
+      }
+    }
+    return html;
+  };
+
+  const appendOutput = (text) => {
+    output.insertAdjacentHTML('beforeend', ansiToHtml(text));
+    output.scrollTop = output.scrollHeight;
+  };
+
+  const selectedWorld = () => worldSelect.options[worldSelect.selectedIndex];
+  const defaultWsUrlForWorld = () => {
+    const world = selectedWorld();
+    if (!world) return '';
+    if (world.dataset.ws) return world.dataset.ws;
+    const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    return `${scheme}://${world.dataset.host}:${world.dataset.port}/`;
+  };
+  const closeSocket = () => {
+    if (!socket) return;
+    try { socket.close(); } catch (err) {}
+  };
+
+  const showWorld = () => appendOutput(`\n[World] ${selectedWorld().textContent}\n`);
+  worldSelect.addEventListener('change', showWorld);
+  showWorld();
+
+  const FADE_DURATION = 2000;
+  const FADE_INTERVAL = 50;
+
+  const handleMusicCommand = (cmd) => {
+    if (cmd.action === 'play' && cmd.url) {
+      musicControls.style.display = 'flex';
+      const targetVol = parseFloat(musicVolume.value);
+
+      /* If nothing is playing yet, start immediately with no fade */
+      if (audio.paused || !audio.src) {
+        audio.src = cmd.url;
+        audio.loop = musicLoop.checked;
+        audio.volume = targetVol;
+        audio.play().catch(() => {});
+        return;
+      }
+
+      /* Already playing the same track — do nothing */
+      if (audio.src === cmd.url) return;
+
+      /* Crossfade: load next track into audioNext, fade out audio, fade in audioNext */
+      if (fadeTimer) { clearInterval(fadeTimer); fadeTimer = null; }
+
+      const outgoing = audio;
+      const incoming = audioNext;
+      incoming.src = cmd.url;
+      incoming.loop = musicLoop.checked;
+      incoming.volume = 0;
+      incoming.play().catch(() => {});
+
+      const steps = FADE_DURATION / FADE_INTERVAL;
+      let step = 0;
+      fadeTimer = setInterval(() => {
+        step++;
+        const t = Math.min(step / steps, 1);
+        outgoing.volume = targetVol * (1 - t);
+        incoming.volume = targetVol * t;
+        if (t >= 1) {
+          clearInterval(fadeTimer);
+          fadeTimer = null;
+          outgoing.pause();
+          outgoing.src = incoming.src;
+          outgoing.loop = incoming.loop;
+          outgoing.volume = targetVol;
+          /* Swap: carry current position of incoming into the main element */
+          outgoing.currentTime = incoming.currentTime;
+          outgoing.play().catch(() => {});
+          incoming.pause();
+          incoming.src = '';
+        }
+      }, FADE_INTERVAL);
+    } else if (cmd.action === 'stop') {
+      /* Fade out current track and stop */
+      if (audio.paused || !audio.src) return;
+      if (fadeTimer) { clearInterval(fadeTimer); fadeTimer = null; }
+      const targetVol = parseFloat(musicVolume.value);
+      const startVol = audio.volume;
+      const steps = FADE_DURATION / FADE_INTERVAL;
+      let step = 0;
+      fadeTimer = setInterval(() => {
+        step++;
+        const t = Math.min(step / steps, 1);
+        audio.volume = startVol * (1 - t);
+        if (t >= 1) {
+          clearInterval(fadeTimer);
+          fadeTimer = null;
+          audio.pause();
+          audio.src = '';
+          audio.volume = targetVol;
+        }
+      }, FADE_INTERVAL);
+    }
+  };
+
+  connectBtn.addEventListener('click', () => {
+    if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+      appendOutput('\n[Info] Already connected.\n');
+      return;
+    }
+
+    const wsUrl = defaultWsUrlForWorld();
+    if (!wsUrl) {
+      appendOutput('[Error] Selected world has no WebSocket endpoint.\n');
+      return;
+    }
+
+    output.textContent = '';
+    appendOutput(`[Connecting] ${wsUrl}\n`);
+    try {
+      socket = new WebSocket(wsUrl);
+    } catch (err) {
+      appendOutput(`[Error] Could not create WebSocket: ${err.message}\n`);
+      socket = null;
+      return;
+    }
+
+    socket.addEventListener('open', () => {
+      appendOutput(`[Connected] ${selectedWorld().textContent}\n`);
+      commandInput.focus();
+    });
+    socket.addEventListener('message', (event) => {
+      if (typeof event.data === 'string' && event.data.startsWith('{')) {
+        try {
+          const cmd = JSON.parse(event.data);
+          if (cmd.type === 'music') { handleMusicCommand(cmd); return; }
+        } catch (_) {}
+      }
+      appendOutput(typeof event.data === 'string' ? event.data : '[Binary message received]\n');
+    });
+    socket.addEventListener('close', (event) => {
+      appendOutput(`\n[Disconnected] code=${event.code} reason=${event.reason || 'none'}\n`);
+      socket = null;
+    });
+    socket.addEventListener('error', () => {
+      appendOutput('\n[Error] WebSocket handshake failed for this endpoint.\n');
+    });
+  });
+
+  disconnectBtn.addEventListener('click', () => {
+    if (!socket || (socket.readyState !== WebSocket.OPEN && socket.readyState !== WebSocket.CONNECTING)) {
+      appendOutput('\n[Info] No active connection.\n');
+      socket = null;
+      return;
+    }
+    closeSocket();
+    appendOutput('\n[Disconnected by user]\n');
+  });
+
+  const sendCommand = () => {
+    const command = commandInput.value;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(`${command}\n`);
+    appendOutput(`\n> ${command}\n`);
+    commandInput.value = '';
+  };
+
+  sendBtn.addEventListener('click', sendCommand);
+  commandInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') sendCommand();
+  });
+})();
+</script>
