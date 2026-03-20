@@ -1,0 +1,30 @@
+name: Deploy Web on Merge to Main
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'web/**'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  deploy-web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull latest code and rebuild web on server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}/web
+            git stash
+            git pull origin main
+            make
+            echo "Web build complete."
