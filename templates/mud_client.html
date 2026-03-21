@@ -1,18 +1,40 @@
 <div id='mud-client-container'>
-<h1>ACKMUD Web Client</h1>
-<p class='muted'>Select a world and press Connect.</p>
-<div class='mud-controls'>
+<div class='mud-controls' style='margin-bottom:.4rem;'>
   <label for='world-select'>World</label>
   <select id='world-select'>__WORLD_OPTIONS__</select>
   <button id='connect-btn' type='button'>Connect</button>
   <button id='disconnect-btn' type='button'>Disconnect</button>
+  <span id='mud-status' class='mud-status'></span>
   <button id='fullscreen-btn' type='button' style='margin-left:auto'>&#x26F6; Fullscreen</button>
 </div>
-<pre id='mud-output' class='mud-output'>Ready.</pre>
-<div class='mud-controls'>
-  <input id='mud-command' placeholder='Type a command and press Enter' style='flex:1;min-width:280px;'>
-  <button id='send-btn' type='button'>Send</button>
+
+<div id='mud-panels'>
+  <!-- Live-data: Graphical Map -->
+  <div class='mud-panel' id='map-panel'>
+    <div class='panel-header'>Map</div>
+    <canvas id='map-canvas'></canvas>
+    <div id='map-placeholder'>Connect to a TNG world to view the map.</div>
+  </div>
+  <div class='panel-divider' id='divider-left'></div>
+
+  <!-- Live-data: Room Description -->
+  <div class='mud-panel' id='room-panel'>
+    <div class='panel-header'>Room</div>
+    <div id='room-content' class='room-content'></div>
+  </div>
+  <div class='panel-divider' id='divider-right'></div>
+
+  <!-- Main I/O with history -->
+  <div class='mud-panel' id='io-panel'>
+    <div class='panel-header'>Output</div>
+    <pre id='mud-output' class='mud-output'></pre>
+    <div class='mud-input-bar'>
+      <input id='mud-command' placeholder='Type a command and press Enter' autocomplete='off' spellcheck='false'>
+      <button id='send-btn' type='button'>Send</button>
+    </div>
+  </div>
 </div>
+
 <div id='music-controls' class='mud-controls' style='display:none;align-items:center;gap:8px;flex-wrap:wrap;'>
   <span style='opacity:0.7;font-size:0.85em;'>&#9835; Music:</span>
   <button id='music-play-btn' type='button'>&#9654; Play</button>
@@ -29,28 +51,538 @@
 <audio id='mud-audio'></audio>
 <audio id='mud-audio-next'></audio>
 </div>
+
 <script>
 (() => {
-  const worldSelect = document.getElementById('world-select');
-  const connectBtn = document.getElementById('connect-btn');
-  const disconnectBtn = document.getElementById('disconnect-btn');
-  const commandInput = document.getElementById('mud-command');
-  const sendBtn = document.getElementById('send-btn');
-  const output = document.getElementById('mud-output');
-  const fullscreenBtn = document.getElementById('fullscreen-btn');
-  const container = document.getElementById('mud-client-container');
-  const musicControls = document.getElementById('music-controls');
-  const musicPlayBtn = document.getElementById('music-play-btn');
-  const musicStopBtn = document.getElementById('music-stop-btn');
-  const musicVolume = document.getElementById('music-volume');
-  const musicLoop = document.getElementById('music-loop');
-  const audio = document.getElementById('mud-audio');
-  const audioNext = document.getElementById('mud-audio-next');
-  let socket = null;
-  let fadeTimer = null;
+  // ── DOM refs ──────────────────────────────────────────────────────────────
+  const worldSelect    = document.getElementById('world-select');
+  const connectBtn     = document.getElementById('connect-btn');
+  const disconnectBtn  = document.getElementById('disconnect-btn');
+  const mudStatus      = document.getElementById('mud-status');
+  const fullscreenBtn  = document.getElementById('fullscreen-btn');
+  const container      = document.getElementById('mud-client-container');
+  const panels         = document.getElementById('mud-panels');
+  const mapPanel       = document.getElementById('map-panel');
+  const mapCanvas      = document.getElementById('map-canvas');
+  const mapPlaceholder = document.getElementById('map-placeholder');
+  const roomContent    = document.getElementById('room-content');
+  const ioOutput       = document.getElementById('mud-output');
+  const commandInput   = document.getElementById('mud-command');
+  const sendBtn        = document.getElementById('send-btn');
+  const musicControls  = document.getElementById('music-controls');
+  const musicPlayBtn   = document.getElementById('music-play-btn');
+  const musicStopBtn   = document.getElementById('music-stop-btn');
+  const musicVolume    = document.getElementById('music-volume');
+  const musicLoop      = document.getElementById('music-loop');
+  const audio          = document.getElementById('mud-audio');
+  const audioNext      = document.getElementById('mud-audio-next');
 
+  // ── Runtime state ─────────────────────────────────────────────────────────
+  let socket       = null;
+  let protocolMode = 'unknown'; // 'v1' | 'v2'
+  let fadeTimer    = null;
+
+  // Room live-data state
+  const roomState = {
+    name: '', description: '', exits: [],
+    mobs:    new Map(), // id    -> entity
+    players: new Map(), // name  -> entity
+    objects: new Map(), // id    -> entity
+    extras:  [],        // [{keyword, actions}]
+  };
+
+  // Map live-data state
+  const mapState = {
+    rooms:       new Map(), // id -> {id, rel_x, rel_y, terrain, exits, mob_count}
+    currentId:   null,
+    hasScouted:  false,
+    tileImages:  new Map(), // terrain -> HTMLImageElement | 'loading' | null
+    animFrame:   null,
+  };
+
+  // ── Terrain appearance ────────────────────────────────────────────────────
+  const TERRAIN_COLOR = {
+    city:'#4a5568', road:'#8b7355', forest:'#2d6a4f', deep_forest:'#1b4332',
+    field:'#52b788', hills:'#74c69d', mountain:'#6c757d', water_swim:'#4895ef',
+    water_noswim:'#023e8a', desert:'#e9c46a', cave:'#343a40', inside:'#495057',
+    air:'#90e0ef', underground:'#212529',
+  };
+  const TERRAIN_LABEL = {
+    city:'CITY', road:'ROAD', forest:'FRST', deep_forest:'DFST',
+    field:'FILD', hills:'HILL', mountain:'MNTN', water_swim:'WATR',
+    water_noswim:'DEEP', desert:'DSRT', cave:'CAVE', inside:'INSD',
+    air:'AIR', underground:'UNDR',
+  };
+
+  // ── ANSI → HTML ───────────────────────────────────────────────────────────
+  const ANSI_FG = {
+    30:'#222222',31:'#ff5f56',32:'#27c93f',33:'#ffbd2e',
+    34:'#61afef',35:'#c678dd',36:'#56b6c2',37:'#d7dae0',
+    90:'#7f848e',91:'#ff7b72',92:'#3fb950',93:'#e3b341',
+    94:'#79c0ff',95:'#d2a8ff',96:'#a5f3fc',97:'#f0f6fc',
+  };
+  const escHtml = s => s.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+  const ansiToHtml = text => {
+    const chunks = text.split(/(\x1b\[[0-9;]*m)/g);
+    let st = {fg:'',bg:'',bold:false,ul:false};
+    let html = '';
+    const attr = () => {
+      const p = [];
+      if (st.fg) p.push(`color:${st.fg}`);
+      if (st.bg) p.push(`background:${st.bg}`);
+      if (st.bold) p.push('font-weight:700');
+      if (st.ul) p.push('text-decoration:underline');
+      return p.length ? ` style="${p.join(';')}"` : '';
+    };
+    for (const chunk of chunks) {
+      const m = chunk.match(/^\x1b\[([0-9;]*)m$/);
+      if (!m) { if (chunk) html += `<span${attr()}>${escHtml(chunk)}</span>`; continue; }
+      for (const c of (m[1] ? m[1].split(';').map(Number) : [0])) {
+        if (c===0) st={fg:'',bg:'',bold:false,ul:false};
+        else if (c===1)  st.bold=true;
+        else if (c===22) st.bold=false;
+        else if (c===4)  st.ul=true;
+        else if (c===24) st.ul=false;
+        else if (c===39) st.fg='';
+        else if (c===49) st.bg='';
+        else if (ANSI_FG[c])    st.fg=ANSI_FG[c];
+        else if (ANSI_FG[c-10]) st.bg=ANSI_FG[c-10];
+      }
+    }
+    return html;
+  };
+
+  // ── I/O panel ─────────────────────────────────────────────────────────────
+  const appendIO = (text, cssClass) => {
+    const span = document.createElement('span');
+    if (cssClass) span.className = cssClass;
+    span.innerHTML = ansiToHtml(text);
+    ioOutput.appendChild(span);
+    ioOutput.scrollTop = ioOutput.scrollHeight;
+  };
+
+  // ── Send command helper ───────────────────────────────────────────────────
+  const sendCmd = cmd => {
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(`${cmd}\n`);
+    appendIO(`\n> ${cmd}\n`);
+    commandInput.value = '';
+  };
+
+  // ── Room panel ────────────────────────────────────────────────────────────
+  const ACTION_LABEL = {
+    look:'Look', examine:'Examine', attack:'Attack', consider:'Consider',
+    get:'Get', tell:'Tell', group:'Group', drink:'Drink', drop:'Drop',
+  };
+  const DIR_CMD = {
+    north:'n', south:'s', east:'e', west:'w', up:'u', down:'d',
+    northeast:'ne', northwest:'nw', southeast:'se', southwest:'sw',
+  };
+  const DIR_ABBR = {
+    north:'N', south:'S', east:'E', west:'W', up:'U', down:'D',
+    northeast:'NE', northwest:'NW', southeast:'SE', southwest:'SW',
+  };
+
+  const closeAllDropdowns = () =>
+    document.querySelectorAll('.entity-dropdown').forEach(d => d.classList.add('hidden'));
+  document.addEventListener('click', closeAllDropdowns);
+
+  const buildActionCmd = (action, entity) => {
+    const kw = entity.keywords?.[0] ?? entity.keyword ?? entity.name ?? '';
+    return action === 'attack' ? `kill ${kw}` : `${action} ${kw}`;
+  };
+
+  const buildEntityRow = (entity, isPlayer) => {
+    const row = document.createElement('div');
+    row.className = 'entity-row';
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'entity-name';
+    nameEl.textContent = entity.name ?? entity.keyword ?? '(unknown)';
+    row.appendChild(nameEl);
+
+    if (entity.actions?.length) {
+      const menuBtn = document.createElement('button');
+      menuBtn.type = 'button';
+      menuBtn.className = 'entity-menu-btn';
+      menuBtn.textContent = '▼';
+      row.appendChild(menuBtn);
+
+      const dropdown = document.createElement('div');
+      dropdown.className = 'entity-dropdown hidden';
+
+      for (const action of entity.actions) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'dropdown-item';
+        btn.textContent = ACTION_LABEL[action] ?? (action[0].toUpperCase() + action.slice(1));
+
+        if (action === 'tell' && isPlayer) {
+          btn.addEventListener('click', e => {
+            e.stopPropagation();
+            closeAllDropdowns();
+            commandInput.value = `tell ${entity.name} `;
+            commandInput.focus();
+          });
+        } else {
+          const cmd = buildActionCmd(action, entity);
+          btn.addEventListener('click', e => {
+            e.stopPropagation();
+            closeAllDropdowns();
+            sendCmd(cmd);
+          });
+        }
+        dropdown.appendChild(btn);
+      }
+
+      menuBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        const wasHidden = dropdown.classList.contains('hidden');
+        closeAllDropdowns();
+        dropdown.classList.toggle('hidden', !wasHidden);
+      });
+      row.appendChild(dropdown);
+    }
+    return row;
+  };
+
+  const renderRoom = () => {
+    roomContent.innerHTML = '';
+    if (!roomState.name) return;
+
+    // Room name
+    const nameEl = document.createElement('div');
+    nameEl.className = 'room-name';
+    nameEl.textContent = roomState.name;
+    roomContent.appendChild(nameEl);
+
+    // Description
+    const descEl = document.createElement('div');
+    descEl.className = 'room-desc';
+    descEl.innerHTML = ansiToHtml(roomState.description);
+    roomContent.appendChild(descEl);
+
+    // Exit chips
+    if (roomState.exits.length) {
+      const exitsEl = document.createElement('div');
+      exitsEl.className = 'room-exits';
+      for (const dir of roomState.exits) {
+        const chip = document.createElement('span');
+        chip.className = 'exit-chip';
+        chip.textContent = DIR_ABBR[dir] ?? dir.toUpperCase();
+        chip.title = dir;
+        chip.addEventListener('click', () => sendCmd(DIR_CMD[dir] ?? dir));
+        exitsEl.appendChild(chip);
+      }
+      roomContent.appendChild(exitsEl);
+    }
+
+    const addSection = (title, items, isPlayer) => {
+      if (!items.length) return;
+      const titleEl = document.createElement('div');
+      titleEl.className = 'room-section-title';
+      titleEl.textContent = title;
+      roomContent.appendChild(titleEl);
+      for (const item of items) roomContent.appendChild(buildEntityRow(item, isPlayer));
+    };
+
+    addSection('Mobs',    Array.from(roomState.mobs.values()),    false);
+    addSection('Players', Array.from(roomState.players.values()), true);
+    addSection('Objects', Array.from(roomState.objects.values()), false);
+    addSection('Extras',  roomState.extras,                       false);
+  };
+
+  const setRoomPlaceholder = text => {
+    roomContent.innerHTML = `<div class="panel-placeholder">${escHtml(text)}</div>`;
+    // Clear live state so stale data is not rendered after reconnect
+    roomState.name = ''; roomState.description = ''; roomState.exits = [];
+    roomState.mobs.clear(); roomState.players.clear(); roomState.objects.clear();
+    roomState.extras = [];
+  };
+
+  // ── Map panel ─────────────────────────────────────────────────────────────
+  const loadTerrainImage = terrain => {
+    if (mapState.tileImages.has(terrain)) return;
+    mapState.tileImages.set(terrain, 'loading');
+    const img = new Image();
+    img.onload  = () => { mapState.tileImages.set(terrain, img); scheduleMapDraw(); };
+    img.onerror = () => { mapState.tileImages.set(terrain, null); };
+    img.src = `/img/terrain/${terrain}.png`;
+  };
+
+  const scheduleMapDraw = () => {
+    if (mapState.animFrame) return;
+    mapState.animFrame = requestAnimationFrame(() => { mapState.animFrame = null; drawMap(); });
+  };
+
+  const resizeMapCanvas = () => {
+    const headerH = mapPanel.querySelector('.panel-header').offsetHeight;
+    const w = Math.max(1, Math.floor(mapPanel.clientWidth));
+    const h = Math.max(1, Math.floor(mapPanel.clientHeight - headerH));
+    if (mapCanvas.width !== w || mapCanvas.height !== h) {
+      mapCanvas.width  = w;
+      mapCanvas.height = h;
+      scheduleMapDraw();
+    }
+  };
+
+  const setMapPlaceholder = text => {
+    mapCanvas.style.display = 'none';
+    mapPlaceholder.style.display = 'flex';
+    mapPlaceholder.textContent = text;
+    // Clear live state
+    mapState.rooms.clear();
+    mapState.currentId  = null;
+    mapState.hasScouted = false;
+  };
+
+  const showMapCanvas = () => {
+    mapPlaceholder.style.display = 'none';
+    mapCanvas.style.display = 'block';
+    resizeMapCanvas();
+  };
+
+  const drawMap = () => {
+    const ctx = mapCanvas.getContext('2d');
+    const W = mapCanvas.width, H = mapCanvas.height;
+    if (!W || !H) return;
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#07090f';
+    ctx.fillRect(0, 0, W, H);
+
+    if (!mapState.currentId || !mapState.rooms.size) return;
+
+    const radius   = mapState.hasScouted ? 3 : 2;
+    const gridSize = radius * 2 + 1;
+    const tileSize = Math.max(14, Math.min(Math.floor(W / gridSize), Math.floor(H / gridSize)));
+    const ox = Math.floor((W - gridSize * tileSize) / 2);
+    const oy = Math.floor((H - gridSize * tileSize) / 2);
+
+    // Draw exit connectors beneath tiles
+    ctx.lineWidth = 1;
+    for (const room of mapState.rooms.values()) {
+      const {rel_x: rx, rel_y: ry} = room;
+      if (Math.abs(rx) > radius || Math.abs(ry) > radius) continue;
+      const cx = ox + (rx + radius) * tileSize + tileSize / 2;
+      const cy = oy + (ry + radius) * tileSize + tileSize / 2;
+      for (const targetId of Object.values(room.exits ?? {})) {
+        const t = mapState.rooms.get(targetId);
+        if (!t || Math.abs(t.rel_x) > radius || Math.abs(t.rel_y) > radius) continue;
+        const tx = ox + (t.rel_x + radius) * tileSize + tileSize / 2;
+        const ty = oy + (t.rel_y + radius) * tileSize + tileSize / 2;
+        const isScoutEdge = mapState.hasScouted &&
+          (Math.abs(rx) === radius || Math.abs(ry) === radius ||
+           Math.abs(t.rel_x) === radius || Math.abs(t.rel_y) === radius);
+        ctx.globalAlpha = isScoutEdge ? 0.2 : 0.3;
+        ctx.strokeStyle = '#b4c8ff';
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(tx, ty); ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1.0;
+
+    // Draw tiles
+    for (const room of mapState.rooms.values()) {
+      const {rel_x: rx, rel_y: ry} = room;
+      if (Math.abs(rx) > radius || Math.abs(ry) > radius) continue;
+
+      const isCurrent   = room.id === mapState.currentId;
+      const isScoutEdge = mapState.hasScouted && (Math.abs(rx) === radius || Math.abs(ry) === radius);
+      const px = ox + (rx + radius) * tileSize;
+      const py = oy + (ry + radius) * tileSize;
+      const pad = 2, ts = tileSize - pad * 2;
+
+      ctx.globalAlpha = isScoutEdge ? 0.4 : 1.0;
+
+      const img = mapState.tileImages.get(room.terrain);
+      if (img && img !== 'loading' && img.complete && img.naturalWidth > 0) {
+        ctx.drawImage(img, px + pad, py + pad, ts, ts);
+      } else {
+        ctx.fillStyle = TERRAIN_COLOR[room.terrain] ?? '#2a2a3a';
+        ctx.fillRect(px + pad, py + pad, ts, ts);
+        if (tileSize >= 28) {
+          ctx.globalAlpha = isScoutEdge ? 0.25 : 0.5;
+          ctx.fillStyle = '#fff';
+          ctx.font = `bold ${Math.max(6, Math.floor(tileSize * 0.22))}px monospace`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(TERRAIN_LABEL[room.terrain] ?? '??', px + tileSize / 2, py + tileSize / 2);
+        }
+      }
+      ctx.globalAlpha = 1.0;
+
+      // Current-room highlight ring + player dot
+      if (isCurrent) {
+        ctx.strokeStyle = '#5b9cf6';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(px + pad, py + pad, ts, ts);
+        ctx.fillStyle = '#5b9cf6';
+        ctx.beginPath();
+        ctx.arc(px + tileSize / 2, py + tileSize / 2, Math.max(3, tileSize * 0.14), 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Mob-count badge on adjacent rooms
+      const mobCount = room.mob_count ?? 0;
+      if (!isCurrent && mobCount > 0) {
+        const br  = Math.max(5, Math.floor(tileSize * 0.18));
+        const bx  = px + tileSize - pad - br;
+        const by  = py + pad + br;
+        ctx.fillStyle = mobCount >= 5 ? '#ff5f56' : '#ffbd2e';
+        ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#07090f';
+        ctx.font = `bold ${Math.max(6, Math.floor(br * 1.3))}px monospace`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(mobCount > 9 ? '9+' : String(mobCount), bx, by);
+      }
+    }
+  };
+
+  // ── Message routing ───────────────────────────────────────────────────────
+  const routeRoom = msg => {
+    switch (msg.tag) {
+      case 'Room':
+        roomState.name        = msg.data.name ?? '';
+        roomState.description = msg.data.description ?? '';
+        roomState.exits       = msg.data.exits ?? [];
+        roomState.mobs.clear();   for (const e of msg.data.mobs    ?? []) roomState.mobs.set(e.id, e);
+        roomState.players.clear();for (const e of msg.data.players ?? []) roomState.players.set(e.name, e);
+        roomState.objects.clear();for (const e of msg.data.objects ?? []) roomState.objects.set(e.id, e);
+        roomState.extras = msg.data.extras ?? [];
+        renderRoom();
+        break;
+
+      case 'Room:Enter':
+      case 'Room:ObjectAppear': {
+        const d = msg.data;
+        if      (d.entity_type === 'mob')    roomState.mobs.set(d.id, d);
+        else if (d.entity_type === 'player') roomState.players.set(d.name, d);
+        else if (d.entity_type === 'object') roomState.objects.set(d.id, d);
+        renderRoom();
+        break;
+      }
+
+      case 'Room:Leave':
+      case 'Room:ObjectVanish': {
+        const d = msg.data;
+        if      (d.entity_type === 'mob')    roomState.mobs.delete(d.id);
+        else if (d.entity_type === 'player') roomState.players.delete(d.name);
+        else if (d.entity_type === 'object') roomState.objects.delete(d.id);
+        renderRoom();
+        break;
+      }
+    }
+  };
+
+  const routeMap = msg => {
+    switch (msg.tag) {
+      case 'Map':
+        mapState.rooms.clear();
+        mapState.currentId  = msg.data.current_room_id ?? null;
+        mapState.hasScouted = false;
+        for (const r of msg.data.rooms ?? []) {
+          mapState.rooms.set(r.id, r);
+          loadTerrainImage(r.terrain ?? 'inside');
+        }
+        showMapCanvas();
+        scheduleMapDraw();
+        break;
+
+      case 'Map:Scan':
+        // data: { north:{room_id,count}, south:{...}, east:{...}, west:{...} }
+        for (const info of Object.values(msg.data)) {
+          if (!info) continue;
+          const r = mapState.rooms.get(info.room_id);
+          if (r) r.mob_count = info.count;
+        }
+        scheduleMapDraw();
+        break;
+
+      case 'Map:Scout':
+        mapState.hasScouted = true;
+        for (const r of msg.data.rooms ?? []) {
+          mapState.rooms.set(r.id, { ...mapState.rooms.get(r.id), ...r });
+          loadTerrainImage(r.terrain ?? 'inside');
+        }
+        scheduleMapDraw();
+        break;
+    }
+  };
+
+  const handleMessage = event => {
+    if (typeof event.data !== 'string') { appendIO('[Binary message received]\n'); return; }
+
+    let msg = null;
+    if (event.data.trimStart().startsWith('{')) {
+      try { msg = JSON.parse(event.data); } catch (_) {}
+    }
+
+    // v1 / legacy path
+    if (!msg || msg.v !== 2) {
+      if (msg?.type === 'music') { handleMusicCommand(msg); return; }
+      if (protocolMode !== 'v1') {
+        protocolMode = 'v1';
+        setRoomPlaceholder('Legacy connection — no room data available.');
+        setMapPlaceholder('Legacy connection — no map data available.');
+      }
+      appendIO(event.data);
+      return;
+    }
+
+    // v2 tagged path
+    if (protocolMode !== 'v2') protocolMode = 'v2';
+    const category = msg.tag?.split(':')[0] ?? '';
+
+    if (category === 'Room')  { routeRoom(msg); return; }
+    if (category === 'Map')   { routeMap(msg);  return; }
+    if (category === 'Music') { if (msg.data) handleMusicCommand(msg.data); return; }
+
+    // All other tags go to the I/O panel
+    const text = typeof msg.data === 'string' ? msg.data : JSON.stringify(msg.data);
+    const cssClass = category === 'System' ? 'io-system'
+                   : msg.tag === 'Communication:Tell' ? 'io-tell'
+                   : '';
+    appendIO(text, cssClass || undefined);
+  };
+
+  // ── Panel resize (drag dividers) ──────────────────────────────────────────
+  const LS_MAP_W  = 'ack.panel.map.pct';
+  const LS_ROOM_W = 'ack.panel.room.pct';
+
+  const loadPanelWidths = () => {
+    document.getElementById('map-panel').style.width  = localStorage.getItem(LS_MAP_W)  ?? '26%';
+    document.getElementById('room-panel').style.width = localStorage.getItem(LS_ROOM_W) ?? '26%';
+  };
+
+  const setupDivider = (dividerId, leftPanelId, lsKey) => {
+    const divider   = document.getElementById(dividerId);
+    const leftPanel = document.getElementById(leftPanelId);
+    let dragging = false, startX = 0, startW = 0;
+
+    divider.addEventListener('mousedown', e => {
+      dragging = true; startX = e.clientX; startW = leftPanel.offsetWidth;
+      divider.classList.add('dragging');
+      document.body.style.cssText += ';cursor:col-resize!important;user-select:none!important';
+    });
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const total = panels.offsetWidth;
+      const newW  = Math.max(80, Math.min(startW + (e.clientX - startX), total * 0.55));
+      const pct   = `${((newW / total) * 100).toFixed(1)}%`;
+      leftPanel.style.width = pct;
+      localStorage.setItem(lsKey, pct);
+      if (leftPanelId === 'map-panel') resizeMapCanvas();
+    });
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false; divider.classList.remove('dragging');
+      document.body.style.cursor = ''; document.body.style.userSelect = '';
+    });
+  };
+
+  // ── Music controller ──────────────────────────────────────────────────────
   audio.volume = parseFloat(musicVolume.value);
-  audio.loop = musicLoop.checked;
+  audio.loop   = musicLoop.checked;
+  const FADE_MS = 2000, FADE_TICK = 50;
 
   musicPlayBtn.addEventListener('click', () => audio.play());
   musicStopBtn.addEventListener('click', () => {
@@ -59,230 +591,146 @@
     audioNext.pause(); audioNext.src = '';
   });
   musicVolume.addEventListener('input', () => { audio.volume = parseFloat(musicVolume.value); });
-  musicLoop.addEventListener('change', () => { audio.loop = musicLoop.checked; audioNext.loop = musicLoop.checked; });
+  musicLoop.addEventListener('change',  () => { audio.loop = musicLoop.checked; audioNext.loop = musicLoop.checked; });
 
-  fullscreenBtn.addEventListener('click', () => {
-    const isFullscreen = container.classList.toggle('mud-fullscreen');
-    document.body.classList.toggle('mud-fullscreen-active', isFullscreen);
-    fullscreenBtn.textContent = isFullscreen ? '\u2715 Exit Fullscreen' : '\u26F6 Fullscreen';
-    output.scrollTop = output.scrollHeight;
-  });
-
-  const ANSI_COLORS = {
-    30: '#222222', 31: '#ff5f56', 32: '#27c93f', 33: '#ffbd2e',
-    34: '#61afef', 35: '#c678dd', 36: '#56b6c2', 37: '#d7dae0',
-    90: '#7f848e', 91: '#ff7b72', 92: '#3fb950', 93: '#e3b341',
-    94: '#79c0ff', 95: '#d2a8ff', 96: '#a5f3fc', 97: '#f0f6fc'
-  };
-
-  const escapeHtml = (value) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-  const ansiToHtml = (text) => {
-    const chunks = text.split(/(\x1b\[[0-9;]*m)/g);
-    let styles = { fg: '', bg: '', bold: false, underline: false };
-    let html = '';
-    const styleText = () => {
-      const entries = [];
-      if (styles.fg) entries.push(`color:${styles.fg}`);
-      if (styles.bg) entries.push(`background:${styles.bg}`);
-      if (styles.bold) entries.push('font-weight:700');
-      if (styles.underline) entries.push('text-decoration:underline');
-      return entries.length ? ` style="${entries.join(';')}"` : '';
-    };
-
-    for (const chunk of chunks) {
-      const match = chunk.match(/^\x1b\[([0-9;]*)m$/);
-      if (!match) {
-        if (chunk.length) html += `<span${styleText()}>${escapeHtml(chunk)}</span>`;
-        continue;
-      }
-      const codes = match[1] ? match[1].split(';').map(Number) : [0];
-      for (const code of codes) {
-        if (code === 0) styles = { fg: '', bg: '', bold: false, underline: false };
-        else if (code === 1) styles.bold = true;
-        else if (code === 22) styles.bold = false;
-        else if (code === 4) styles.underline = true;
-        else if (code === 24) styles.underline = false;
-        else if (code === 39) styles.fg = '';
-        else if (code === 49) styles.bg = '';
-        else if (ANSI_COLORS[code]) styles.fg = ANSI_COLORS[code];
-        else if (ANSI_COLORS[code - 10]) styles.bg = ANSI_COLORS[code - 10];
-      }
-    }
-    return html;
-  };
-
-  const appendOutput = (text) => {
-    output.insertAdjacentHTML('beforeend', ansiToHtml(text));
-    output.scrollTop = output.scrollHeight;
-  };
-
-  const selectedWorld = () => worldSelect.options[worldSelect.selectedIndex];
-  const defaultWsUrlForWorld = () => {
-    const world = selectedWorld();
-    if (!world) return '';
-    if (world.dataset.ws) return world.dataset.ws;
-    const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    return `${scheme}://${world.dataset.host}:${world.dataset.port}/`;
-  };
-  const closeSocket = () => {
-    if (!socket) return;
-    try { socket.close(); } catch (err) {}
-  };
-
-  const showWorld = () => appendOutput(`\n[World] ${selectedWorld().textContent}\n`);
-  worldSelect.addEventListener('change', showWorld);
-  showWorld();
-
-  const FADE_DURATION = 2000;
-  const FADE_INTERVAL = 50;
-
-  const handleMusicCommand = (cmd) => {
+  const handleMusicCommand = cmd => {
     if (cmd.action === 'play' && cmd.url) {
       musicControls.style.display = 'flex';
-      const targetVol = parseFloat(musicVolume.value);
-
-      /* If nothing is playing yet, start immediately with no fade */
+      const vol = parseFloat(musicVolume.value);
       if (audio.paused || !audio.src) {
-        audio.src = cmd.url;
-        audio.loop = musicLoop.checked;
-        audio.volume = targetVol;
+        audio.src = cmd.url; audio.loop = musicLoop.checked; audio.volume = vol;
         audio.play().catch(() => {});
         return;
       }
-
-      /* Already playing the same track — do nothing */
       if (audio.src === cmd.url) return;
-
-      /* Crossfade: load next track into audioNext, fade out audio, fade in audioNext */
       if (fadeTimer) { clearInterval(fadeTimer); fadeTimer = null; }
-
-      const outgoing = audio;
-      const incoming = audioNext;
-      incoming.src = cmd.url;
-      incoming.loop = musicLoop.checked;
-      incoming.volume = 0;
-      incoming.play().catch(() => {});
-
-      const steps = FADE_DURATION / FADE_INTERVAL;
-      let step = 0;
+      const out = audio, inc = audioNext;
+      inc.src = cmd.url; inc.loop = musicLoop.checked; inc.volume = 0;
+      inc.play().catch(() => {});
+      const steps = FADE_MS / FADE_TICK; let step = 0;
       fadeTimer = setInterval(() => {
-        step++;
-        const t = Math.min(step / steps, 1);
-        outgoing.volume = targetVol * (1 - t);
-        incoming.volume = targetVol * t;
+        const t = Math.min(++step / steps, 1);
+        out.volume = vol * (1 - t); inc.volume = vol * t;
         if (t >= 1) {
-          clearInterval(fadeTimer);
-          fadeTimer = null;
-          outgoing.pause();
-          outgoing.src = incoming.src;
-          outgoing.loop = incoming.loop;
-          outgoing.volume = targetVol;
-          /* Swap: carry current position of incoming into the main element */
-          outgoing.currentTime = incoming.currentTime;
-          outgoing.play().catch(() => {});
-          incoming.pause();
-          incoming.src = '';
+          clearInterval(fadeTimer); fadeTimer = null;
+          out.pause(); out.src = inc.src; out.loop = inc.loop;
+          out.volume = vol; out.currentTime = inc.currentTime;
+          out.play().catch(() => {}); inc.pause(); inc.src = '';
         }
-      }, FADE_INTERVAL);
+      }, FADE_TICK);
     } else if (cmd.action === 'stop') {
-      /* Fade out current track and stop */
       if (audio.paused || !audio.src) return;
       if (fadeTimer) { clearInterval(fadeTimer); fadeTimer = null; }
-      const targetVol = parseFloat(musicVolume.value);
-      const startVol = audio.volume;
-      const steps = FADE_DURATION / FADE_INTERVAL;
-      let step = 0;
+      const startVol = audio.volume, vol = parseFloat(musicVolume.value);
+      const steps = FADE_MS / FADE_TICK; let step = 0;
       fadeTimer = setInterval(() => {
-        step++;
-        const t = Math.min(step / steps, 1);
+        const t = Math.min(++step / steps, 1);
         audio.volume = startVol * (1 - t);
         if (t >= 1) {
-          clearInterval(fadeTimer);
-          fadeTimer = null;
-          audio.pause();
-          audio.src = '';
-          audio.volume = targetVol;
+          clearInterval(fadeTimer); fadeTimer = null;
+          audio.pause(); audio.src = ''; audio.volume = vol;
         }
-      }, FADE_INTERVAL);
+      }, FADE_TICK);
     }
+  };
+
+  // ── WebSocket connection ──────────────────────────────────────────────────
+  const setStatus = (text, cls) => { mudStatus.textContent = text; mudStatus.className = `mud-status${cls ? ' ' + cls : ''}`; };
+  const selectedWorld = () => worldSelect.options[worldSelect.selectedIndex];
+  const defaultWsUrl  = () => {
+    const w = selectedWorld();
+    if (!w) return '';
+    if (w.dataset.ws) return w.dataset.ws;
+    const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+    return `${scheme}://${w.dataset.host}:${w.dataset.port}/`;
   };
 
   connectBtn.addEventListener('click', () => {
     if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
-      appendOutput('\n[Info] Already connected.\n');
-      return;
+      appendIO('\n[Info] Already connected.\n', 'io-system'); return;
     }
+    const wsUrl = defaultWsUrl();
+    if (!wsUrl) { appendIO('[Error] No WebSocket endpoint configured.\n', 'io-system'); return; }
 
-    const wsUrl = defaultWsUrlForWorld();
-    if (!wsUrl) {
-      appendOutput('[Error] Selected world has no WebSocket endpoint.\n');
-      return;
-    }
+    protocolMode = 'unknown';
+    ioOutput.textContent = '';
+    setRoomPlaceholder('Connecting\u2026');
+    setMapPlaceholder('Connecting\u2026');
+    appendIO(`[Connecting] ${wsUrl}\n`, 'io-system');
+    setStatus('Connecting\u2026');
 
     const isSecure = wsUrl.startsWith('wss://');
 
-    output.textContent = '';
-    appendOutput(`[Connecting] ${wsUrl}\n`);
-    try {
-      socket = new WebSocket(wsUrl);
-    } catch (err) {
-      appendOutput(`[Error] Could not create WebSocket: ${err.message}\n`);
-      socket = null;
-      return;
-    }
+    try { socket = new WebSocket(wsUrl); }
+    catch (err) { appendIO(`[Error] ${err.message}\n`, 'io-system'); socket = null; return; }
 
     socket.addEventListener('open', () => {
       const secTag = isSecure ? ' [WSS]' : ' [WS]';
-      appendOutput(`[Connected] ${selectedWorld().textContent}${secTag}\n`);
+      appendIO(`[Connected] ${selectedWorld().textContent}${secTag}\n`, 'io-system');
+      setStatus('Connected', 'connected');
+      setRoomPlaceholder('Waiting for room data\u2026');
       commandInput.focus();
     });
-    socket.addEventListener('message', (event) => {
-      if (typeof event.data === 'string' && event.data.startsWith('{')) {
-        try {
-          const cmd = JSON.parse(event.data);
-          if (cmd.type === 'music') { handleMusicCommand(cmd); return; }
-        } catch (_) {}
-      }
-      appendOutput(typeof event.data === 'string' ? event.data : '[Binary message received]\n');
-    });
-    socket.addEventListener('close', (event) => {
-      appendOutput(`\n[Disconnected] code=${event.code} reason=${event.reason || 'none'}\n`);
+    socket.addEventListener('message', handleMessage);
+    socket.addEventListener('close', e => {
+      appendIO(`\n[Disconnected] code=${e.code} reason=${e.reason || 'none'}\n`, 'io-system');
+      setStatus('Disconnected');
       socket = null;
     });
     socket.addEventListener('error', () => {
       if (isSecure) {
-        appendOutput(
+        appendIO(
           '\n[Error] WSS connection failed. The server does not appear to support' +
           ' secure WebSocket (wss://) on this endpoint yet.\n' +
-          '[Info] The server admin needs to set up a TLS proxy in front of the game server.\n'
+          '[Info] The server admin needs to set up a TLS proxy in front of the game server.\n',
+          'io-system'
         );
       } else {
-        appendOutput('\n[Error] WebSocket connection failed.\n');
+        appendIO('\n[Error] WebSocket connection failed.\n', 'io-system');
       }
+      setStatus('Error', 'error');
     });
   });
 
   disconnectBtn.addEventListener('click', () => {
     if (!socket || (socket.readyState !== WebSocket.OPEN && socket.readyState !== WebSocket.CONNECTING)) {
-      appendOutput('\n[Info] No active connection.\n');
-      socket = null;
-      return;
+      appendIO('\n[Info] No active connection.\n', 'io-system'); socket = null; return;
     }
-    closeSocket();
-    appendOutput('\n[Disconnected by user]\n');
+    try { socket.close(); } catch (_) {}
+    appendIO('\n[Disconnected by user]\n', 'io-system');
+    setStatus('Disconnected');
   });
 
   const sendCommand = () => {
-    const command = commandInput.value;
-    if (!socket || socket.readyState !== WebSocket.OPEN) return;
-    socket.send(`${command}\n`);
-    appendOutput(`\n> ${command}\n`);
+    const cmd = commandInput.value.trim();
+    if (!cmd || !socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(`${commandInput.value}\n`);
+    appendIO(`\n> ${commandInput.value}\n`);
     commandInput.value = '';
   };
-
   sendBtn.addEventListener('click', sendCommand);
-  commandInput.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') sendCommand();
+  commandInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendCommand(); });
+
+  // ── Fullscreen ────────────────────────────────────────────────────────────
+  fullscreenBtn.addEventListener('click', () => {
+    const isFs = container.classList.toggle('mud-fullscreen');
+    document.body.classList.toggle('mud-fullscreen-active', isFs);
+    fullscreenBtn.textContent = isFs ? '\u2715 Exit Fullscreen' : '\u26F6 Fullscreen';
+    if (isFs) { resizeMapCanvas(); ioOutput.scrollTop = ioOutput.scrollHeight; }
   });
+
+  // ── ResizeObserver: keep map canvas pixel-accurate ────────────────────────
+  if (window.ResizeObserver) new ResizeObserver(resizeMapCanvas).observe(mapPanel);
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+  loadPanelWidths();
+  setupDivider('divider-left',  'map-panel',  LS_MAP_W);
+  setupDivider('divider-right', 'room-panel', LS_ROOM_W);
+  setRoomPlaceholder('Connect to a TNG world to view the room.');
+  setMapPlaceholder('Connect to a TNG world to view the map.');
+
+  const showWorld = () => appendIO(`\n[World] ${selectedWorld()?.textContent ?? ''}\n`, 'io-system');
+  worldSelect.addEventListener('change', showWorld);
+  showWorld();
 })();
 </script>
