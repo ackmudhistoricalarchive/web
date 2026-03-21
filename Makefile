@@ -1,6 +1,6 @@
 .PHONY: all clean test nginx-install nginx-reload certbot-acktng
 
-SERVICE ?= ackmud-web
+SERVICE ?= web-server
 
 # The Python app listens on 8080; nginx proxies port 80/443 to it.
 export ACK_WEB_PORT ?= 8080
