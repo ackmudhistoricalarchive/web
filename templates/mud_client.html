@@ -219,6 +219,8 @@
       return;
     }
 
+    const isSecure = wsUrl.startsWith('wss://');
+
     output.textContent = '';
     appendOutput(`[Connecting] ${wsUrl}\n`);
     try {
@@ -230,7 +232,8 @@
     }
 
     socket.addEventListener('open', () => {
-      appendOutput(`[Connected] ${selectedWorld().textContent}\n`);
+      const secTag = isSecure ? ' [WSS]' : ' [WS]';
+      appendOutput(`[Connected] ${selectedWorld().textContent}${secTag}\n`);
       commandInput.focus();
     });
     socket.addEventListener('message', (event) => {
@@ -247,7 +250,15 @@
       socket = null;
     });
     socket.addEventListener('error', () => {
-      appendOutput('\n[Error] WebSocket handshake failed for this endpoint.\n');
+      if (isSecure) {
+        appendOutput(
+          '\n[Error] WSS connection failed. The server does not appear to support' +
+          ' secure WebSocket (wss://) on this endpoint yet.\n' +
+          '[Info] The server admin needs to set up a TLS proxy in front of the game server.\n'
+        );
+      } else {
+        appendOutput('\n[Error] WebSocket connection failed.\n');
+      }
     });
   });
 
