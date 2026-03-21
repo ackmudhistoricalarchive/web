@@ -698,8 +698,7 @@
     const w = selectedWorld();
     if (!w) return '';
     if (w.dataset.ws) return w.dataset.ws;
-    const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
-    return `${scheme}://${w.dataset.host}:${w.dataset.port}/`;
+    return `wss://${w.dataset.host}:${w.dataset.port}/`;
   };
 
   connectBtn.addEventListener('click', () => {
