@@ -698,7 +698,7 @@
     const w = selectedWorld();
     if (!w) return '';
     if (w.dataset.ws) return w.dataset.ws;
-    return `wss://${w.dataset.host}:${w.dataset.port}/`;
+    return `${w.dataset.scheme}://${w.dataset.host}:${w.dataset.port}/`;
   };
 
   connectBtn.addEventListener('click', () => {

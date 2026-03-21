@@ -28,9 +28,9 @@ TEMPLATE_DIR = WEB_DIR / "templates"
 IMG_DIR = WEB_DIR / "img"
 MP3_DIR = WEB_DIR / "mp3"
 WORLD_TARGETS = [
-    {"id": "acktng", "name": "ACK!TNG", "host": "ackmud.com", "port": 9890},
-    {"id": "ack431", "name": "ACK! 4.3.1", "host": "ackmud.com", "port": 8891},
-    {"id": "ack42", "name": "ACK! 4.2", "host": "ackmud.com", "port": 8892},
+    {"id": "acktng", "name": "ACK!TNG", "host": "ackmud.com", "port": 9890, "scheme": "wss"},
+    {"id": "ack431", "name": "ACK! 4.3.1", "host": "ackmud.com", "port": 8891, "scheme": "ws"},
+    {"id": "ack42", "name": "ACK! 4.2", "host": "ackmud.com", "port": 8892, "scheme": "ws"},
 ]
 
 _template_cache: dict[str, tuple[int, str]] = {}
@@ -549,7 +549,7 @@ def _build_stories_page() -> str:
 def _build_mud_client_page() -> str:
     world_options = "".join(
         (
-            f"<option value='{world['id']}' data-host='{world['host']}' data-port='{world['port']}'>{world['name']} ({world['host']}:{world['port']})</option>"
+            f"<option value='{world['id']}' data-host='{world['host']}' data-port='{world['port']}' data-scheme='{world['scheme']}'>{world['name']} ({world['host']}:{world['port']})</option>"
         )
         for world in WORLD_TARGETS
     )
