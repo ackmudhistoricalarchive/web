@@ -15,10 +15,11 @@ from urllib.parse import parse_qs, unquote, urlparse
 HOST = "0.0.0.0"
 PORT = int(os.environ.get("ACK_WEB_PORT", "80"))
 WEB_DIR = Path(__file__).resolve().parent
+DATA_DIR = WEB_DIR / "data"
 ACKTNG_DIR = Path.home() / "acktng"
-WHO_HTML_FILE = ACKTNG_DIR / "soewholist.html"
-WHO_COUNT_FILE = ACKTNG_DIR / "whocount.html"
-GSGP_FILE = WEB_DIR / os.environ.get("GSGP_FILE", "gsgp.json")
+WHO_HTML_FILE = DATA_DIR / "wholist.html"
+WHO_COUNT_FILE = DATA_DIR / "whocount.html"
+GSGP_FILE = DATA_DIR / os.environ.get("GSGP_FILE", "gsgp.json")
 UPDATE_SECRET = os.environ.get("ACK_UPDATE_SECRET", "")
 HELP_DIR = ACKTNG_DIR / "help"
 SHELP_DIR = ACKTNG_DIR / "shelp"
@@ -293,7 +294,7 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
         if who_html is None and who_count is None:
             self.send_error(400, "Bad Request")
             return
-        ACKTNG_DIR.mkdir(parents=True, exist_ok=True)
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
         if who_html is not None:
             WHO_HTML_FILE.write_text(who_html, encoding="utf-8")
         if who_count is not None:
