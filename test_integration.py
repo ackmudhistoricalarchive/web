@@ -62,27 +62,33 @@ class ServerIntegrationTest(unittest.TestCase):
     # Helpers
     # ------------------------------------------------------------------
 
-    def _get(self, path: str) -> tuple[int, str]:
+    def _get(self, path: str, host: str = "ackmud.com") -> tuple[int, str]:
         """Return (status_code, body) without following redirects."""
         url = f"http://127.0.0.1:{self.port}{path}"
+        req = urllib.request.Request(url, headers={"Host": host})
         try:
-            resp = _no_redirect_opener.open(url)
+            resp = _no_redirect_opener.open(req)
             return resp.status, resp.read().decode("utf-8", errors="replace")
         except urllib.error.HTTPError as exc:
             return exc.code, exc.read().decode("utf-8", errors="replace")
 
-    def _assert_ok_contains(self, path: str, *fragments: str) -> None:
-        status, body = self._get(path)
+    def _get_aha(self, path: str) -> tuple[int, str]:
+        """Fetch a path from the AHA site (aha.ackmud.com)."""
+        return self._get(path, host="aha.ackmud.com")
+
+    def _assert_ok_contains(self, path: str, *fragments: str, host: str = "ackmud.com") -> None:
+        status, body = self._get(path, host=host)
         self.assertEqual(status, 200, f"Expected 200 for {path}, got {status}")
         for fragment in fragments:
             self.assertIn(
                 fragment, body, f"Expected {fragment!r} in response body for {path}"
             )
 
-    def _assert_redirect(self, path: str, location: str) -> None:
+    def _assert_redirect(self, path: str, location: str, host: str = "ackmud.com") -> None:
         url = f"http://127.0.0.1:{self.port}{path}"
+        req = urllib.request.Request(url, headers={"Host": host})
         try:
-            _no_redirect_opener.open(url)
+            _no_redirect_opener.open(req)
             self.fail(f"Expected redirect for {path} but got 200")
         except urllib.error.HTTPError as exc:
             self.assertEqual(
@@ -95,87 +101,130 @@ class ServerIntegrationTest(unittest.TestCase):
             )
 
     # ------------------------------------------------------------------
-    # Core pages
+    # World of Lore site (ackmud.com)
     # ------------------------------------------------------------------
 
-    def test_home_page_200(self) -> None:
-        self._assert_ok_contains("/", "ACKMUD", "Historical Archive")
+    def test_wol_home_page_200(self) -> None:
+        self._assert_ok_contains("/", "AHA: World of Lore")
 
-    def test_home_redirect(self) -> None:
+    def test_wol_home_redirect(self) -> None:
         self._assert_redirect("/home", "/")
 
-    def test_home_slash_redirect(self) -> None:
+    def test_wol_home_slash_redirect(self) -> None:
         self._assert_redirect("/home/", "/")
 
-    def test_players_page_200(self) -> None:
-        self._assert_ok_contains("/players", "ACKMUD Player Activity")
+    def test_wol_players_page_200(self) -> None:
+        self._assert_ok_contains("/players", "Who's Online")
 
-    def test_who_alias_200(self) -> None:
+    def test_wol_who_alias_200(self) -> None:
         status, _ = self._get("/who")
         self.assertEqual(status, 200)
 
-    def test_mud_client_200(self) -> None:
-        self._assert_ok_contains("/mud", "ACKMUD Web Client")
+    def test_wol_mud_client_200(self) -> None:
+        self._assert_ok_contains("/mud", "AHA: World of Lore")
 
-    def test_map_200(self) -> None:
-        self._assert_ok_contains("/map", "World Map")
+    def test_wol_map_404(self) -> None:
+        status, _ = self._get("/map")
+        self.assertEqual(status, 404)
 
-    def test_world_map_alias_200(self) -> None:
-        status, _ = self._get("/world-map")
+    def test_wol_stories_404(self) -> None:
+        status, _ = self._get("/stories")
+        self.assertEqual(status, 404)
+
+    def test_wol_reference_404(self) -> None:
+        status, _ = self._get("/reference/")
+        self.assertEqual(status, 404)
+
+    def test_wol_no_github_link(self) -> None:
+        _, body = self._get("/")
+        self.assertNotIn("github.com/ackmudhistoricalarchive", body)
+
+    def test_wol_has_aha_link(self) -> None:
+        _, body = self._get("/")
+        self.assertIn("aha.ackmud.com", body)
+
+    # ------------------------------------------------------------------
+    # AHA site (aha.ackmud.com)
+    # ------------------------------------------------------------------
+
+    def test_aha_home_page_200(self) -> None:
+        self._assert_ok_contains("/", "ACKmud Historical Archive", host="aha.ackmud.com")
+
+    def test_aha_map_200(self) -> None:
+        self._assert_ok_contains("/map", "World Map", host="aha.ackmud.com")
+
+    def test_aha_world_map_alias_200(self) -> None:
+        status, _ = self._get_aha("/world-map")
         self.assertEqual(status, 200)
 
-    def test_stories_200(self) -> None:
-        self._assert_ok_contains("/stories", "Tales from the Age of Monuments")
+    def test_aha_stories_200(self) -> None:
+        self._assert_ok_contains("/stories", "Tales from the Age of Monuments", host="aha.ackmud.com")
 
-    # ------------------------------------------------------------------
-    # Reference pages
-    # ------------------------------------------------------------------
-
-    def test_reference_page_200(self) -> None:
-        status, body = self._get("/reference/")
+    def test_aha_reference_page_200(self) -> None:
+        status, body = self._get_aha("/reference/")
         self.assertEqual(status, 200)
         self.assertIn("Help", body)
 
-    def test_reference_help_200(self) -> None:
-        status, _ = self._get("/reference/help/")
+    def test_aha_reference_help_200(self) -> None:
+        status, _ = self._get_aha("/reference/help/")
         self.assertEqual(status, 200)
 
-    def test_reference_shelp_200(self) -> None:
-        status, _ = self._get("/reference/shelp/")
+    def test_aha_reference_shelp_200(self) -> None:
+        status, _ = self._get_aha("/reference/shelp/")
         self.assertEqual(status, 200)
 
-    def test_reference_lore_200(self) -> None:
-        status, _ = self._get("/reference/lore/")
+    def test_aha_reference_lore_200(self) -> None:
+        status, _ = self._get_aha("/reference/lore/")
         self.assertEqual(status, 200)
+
+    def test_aha_has_github_link(self) -> None:
+        _, body = self._get_aha("/")
+        self.assertIn("github.com/ackmudhistoricalarchive", body)
+
+    def test_aha_has_wol_link(self) -> None:
+        _, body = self._get_aha("/")
+        self.assertIn("ackmud.com", body)
+
+    def test_aha_who_404(self) -> None:
+        status, _ = self._get_aha("/who")
+        self.assertEqual(status, 404)
+
+    def test_aha_mud_404(self) -> None:
+        status, _ = self._get_aha("/mud")
+        self.assertEqual(status, 404)
 
     # ------------------------------------------------------------------
-    # Legacy URL redirects
+    # Legacy URL redirects (AHA site)
     # ------------------------------------------------------------------
 
     def test_help_redirects_to_reference(self) -> None:
-        self._assert_redirect("/help/", "/reference/help/")
+        self._assert_redirect("/help/", "/reference/help/", host="aha.ackmud.com")
 
     def test_shelp_redirects_to_reference(self) -> None:
-        self._assert_redirect("/shelp/", "/reference/shelp/")
+        self._assert_redirect("/shelp/", "/reference/shelp/", host="aha.ackmud.com")
 
     def test_lore_redirects_to_reference(self) -> None:
-        self._assert_redirect("/lore/", "/reference/lore/")
+        self._assert_redirect("/lore/", "/reference/lore/", host="aha.ackmud.com")
 
     def test_helps_redirects_to_reference(self) -> None:
-        self._assert_redirect("/helps/", "/reference/help/")
+        self._assert_redirect("/helps/", "/reference/help/", host="aha.ackmud.com")
 
     def test_shelps_redirects_to_reference(self) -> None:
-        self._assert_redirect("/shelps/", "/reference/shelp/")
+        self._assert_redirect("/shelps/", "/reference/shelp/", host="aha.ackmud.com")
 
     def test_lores_redirects_to_reference(self) -> None:
-        self._assert_redirect("/lores/", "/reference/lore/")
+        self._assert_redirect("/lores/", "/reference/lore/", host="aha.ackmud.com")
 
     # ------------------------------------------------------------------
-    # Static image serving
+    # Static image serving (both sites)
     # ------------------------------------------------------------------
 
-    def test_logo_image_200(self) -> None:
+    def test_logo_image_200_wol(self) -> None:
         status, _ = self._get("/img/ackmud_logo_transparent.png")
+        self.assertEqual(status, 200)
+
+    def test_logo_image_200_aha(self) -> None:
+        status, _ = self._get_aha("/img/ackmud_logo_transparent.png")
         self.assertEqual(status, 200)
 
     def test_missing_image_404(self) -> None:
@@ -186,8 +235,12 @@ class ServerIntegrationTest(unittest.TestCase):
     # 404 handling
     # ------------------------------------------------------------------
 
-    def test_unknown_route_404(self) -> None:
+    def test_unknown_route_404_wol(self) -> None:
         status, _ = self._get("/this-does-not-exist")
+        self.assertEqual(status, 404)
+
+    def test_unknown_route_404_aha(self) -> None:
+        status, _ = self._get_aha("/this-does-not-exist")
         self.assertEqual(status, 404)
 
     def test_post_returns_404(self) -> None:
@@ -208,17 +261,22 @@ class ServerIntegrationTest(unittest.TestCase):
         self.assertEqual(status, 404)
 
     def test_path_traversal_in_helps_404(self) -> None:
-        status, _ = self._get("/helps/../../etc/passwd")
+        status, _ = self._get_aha("/helps/../../etc/passwd")
         self.assertEqual(status, 404)
 
     # ------------------------------------------------------------------
     # HTML content sanity checks
     # ------------------------------------------------------------------
 
-    def test_home_has_nav_links(self) -> None:
+    def test_wol_home_has_nav_links(self) -> None:
         _, body = self._get("/")
         self.assertIn("/mud", body)
         self.assertIn("/who", body)
+
+    def test_aha_home_has_reference_nav(self) -> None:
+        _, body = self._get_aha("/")
+        self.assertIn("/reference", body)
+        self.assertIn("/stories", body)
 
     def test_mud_client_contains_world_options(self) -> None:
         _, body = self._get("/mud")
@@ -226,13 +284,13 @@ class ServerIntegrationTest(unittest.TestCase):
         self.assertIn("9890", body)  # ACK!TNG port
 
     def test_reference_search_form_present(self) -> None:
-        _, body = self._get("/reference/help/")
+        _, body = self._get_aha("/reference/help/")
         self.assertIn("<form", body)
         self.assertIn("name='q'", body)
 
     def test_reference_search_query_filters(self) -> None:
         """Searching for a nonexistent term should say no matches."""
-        _, body = self._get("/reference/help/?q=zzzznonexistenttopiczzz")
+        _, body = self._get_aha("/reference/help/?q=zzzznonexistenttopiczzz")
         # Either "No topics match" or "No topics available" — both are fine
         self.assertTrue(
             "No topics" in body,

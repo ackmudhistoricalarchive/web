@@ -42,6 +42,39 @@ _topic_content_lock = Lock()
 _logo_data_uri_cache: tuple[int, str] | None = None
 _logo_data_uri_lock = Lock()
 
+# ── Site constants ─────────────────────────────────────────────────────────────
+
+_WOL_TAGLINE = "AHA: World of Lore &mdash; A living world forged in text and tradition."
+_AHA_TAGLINE = "ACKmud Historical Archive &mdash; Preservation and interpretation of an enduring text-world tradition."
+
+_WOL_NAV = (
+    "<nav>"
+    "<a href='/'>Home</a>"
+    "<a href='/who/'>Who</a>"
+    "<a href='/mud/'>MUD Client</a>"
+    "<a href='https://discord.gg/T24UQV8h' target='_blank' rel='noopener noreferrer'>Discord</a>"
+    "<a href='https://aha.ackmud.com/' target='_blank' rel='noopener noreferrer'>Historical Archive</a>"
+    "</nav>"
+)
+
+_AHA_NAV = (
+    "<nav>"
+    "<a href='/'>Home</a>"
+    "<a href='/reference/'>Reference</a>"
+    "<a href='/map/'>Map</a>"
+    "<a href='/stories/'>Stories</a>"
+    "<a href='https://discord.gg/T24UQV8h' target='_blank' rel='noopener noreferrer'>Discord</a>"
+    "<a href='https://github.com/ackmudhistoricalarchive' target='_blank' rel='noopener noreferrer'>Github</a>"
+    "<a href='https://ackmud.com/' target='_blank' rel='noopener noreferrer'>World of Lore</a>"
+    "</nav>"
+)
+
+
+def _get_site(headers: object) -> str:
+    """Return 'aha' for aha.ackmud.com, 'wol' for everything else."""
+    host = (headers.get("Host", "") or "").lower().split(":")[0]  # type: ignore[attr-defined]
+    return "aha" if host.startswith("aha.") else "wol"
+
 
 class WhoRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler interface)
@@ -49,39 +82,74 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
         route = unquote(parsed_url.path)
         query = parse_qs(parsed_url.query)
         help_query = query.get("q", [""])[0].strip()
+        site = _get_site(self.headers)
 
         if route in ("/home", "/home/"):
             self._redirect_to("/")
             return
 
-        if route in ("/",):
-            self._send_html(_build_home_page(), title="ACKMUD Historical Archive")
-            return
-
+        # Static assets — available on both sites
         if route.startswith("/img/"):
-            image_name = route[len("/img/") :]
-            self._send_static_image(image_name)
+            self._send_static_image(route[len("/img/"):])
             return
 
         if route.startswith("/web/mp3/"):
-            filename = route[len("/web/mp3/") :]
-            self._send_static_audio(filename)
+            self._send_static_audio(route[len("/web/mp3/"):])
+            return
+
+        if site == "wol":
+            self._handle_wol_route(route)
+        else:
+            self._handle_aha_route(route, help_query)
+
+    def _handle_wol_route(self, route: str) -> None:
+        """Routes served on ackmud.com — AHA: World of Lore."""
+        if route in ("/",):
+            self._send_html(
+                _build_wol_home_page(),
+                title="AHA: World of Lore",
+                site="wol",
+            )
             return
 
         if route in ("/players", "/players/", "/who", "/who/"):
-            self._send_html(self._build_players_page(), title="ACKMUD Player List")
+            self._send_html(
+                self._build_players_page(),
+                title="Who's Online",
+                site="wol",
+            )
             return
 
         if route in ("/mud", "/mud/"):
-            self._send_html(_build_mud_client_page(), title="ACKMUD Web Client")
+            self._send_html(
+                _build_mud_client_page(),
+                title="AHA: World of Lore — MUD Client",
+                site="wol",
+            )
+            return
+
+        self.send_error(404, "Not Found")
+
+    def _handle_aha_route(self, route: str, help_query: str) -> None:
+        """Routes served on aha.ackmud.com — ACKmud Historical Archive."""
+        if route in ("/",):
+            self._send_html(
+                _build_home_page(),
+                title="ACKmud Historical Archive",
+                site="aha",
+            )
             return
 
         if route in ("/map", "/map/", "/world-map", "/world-map/"):
-            self._send_html(_build_world_map_page(), title="World Map")
+            self._send_html(_build_world_map_page(), title="World Map", site="aha")
             return
 
         if route in ("/stories", "/stories/"):
-            self._send_html(_build_stories_page(), title="Tales from the Age of Monuments")
+            self._send_html(
+                _build_stories_page(),
+                title="Tales from the Age of Monuments",
+                site="aha",
+            )
             return
 
         if route in ("/help", "/help/", "/helps", "/helps/"):
@@ -100,6 +168,7 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             self._send_html(
                 _build_reference_page("help", help_query),
                 title="Help Topics",
+                site="aha",
             )
             return
 
@@ -107,6 +176,7 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             self._send_html(
                 _build_reference_page("help", help_query),
                 title="Help Topics",
+                site="aha",
             )
             return
 
@@ -114,6 +184,7 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             self._send_html(
                 _build_reference_page("shelp", help_query),
                 title="Spell Help Topics",
+                site="aha",
             )
             return
 
@@ -121,21 +192,22 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             self._send_html(
                 _build_reference_page("lore", help_query),
                 title="Lore Topics",
+                site="aha",
             )
             return
 
         if route.startswith("/helps/"):
-            topic = route[len("/helps/") :]
-            self._send_topic_page("Help", HELP_DIR, topic, "reference/help")
+            topic = route[len("/helps/"):]
+            self._send_topic_page("Help", HELP_DIR, topic, "reference/help", site="aha")
             return
 
         if route.startswith("/shelps/"):
-            topic = route[len("/shelps/") :]
-            self._send_topic_page("Spell Help", SHELP_DIR, topic, "reference/shelp")
+            topic = route[len("/shelps/"):]
+            self._send_topic_page("Spell Help", SHELP_DIR, topic, "reference/shelp", site="aha")
             return
 
         if route.startswith("/lores/"):
-            topic = route[len("/lores/") :]
+            topic = route[len("/lores/"):]
             self._send_lore_topic_page(topic)
             return
 
@@ -161,9 +233,11 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             f"<p><a href='/reference/lore/'>Back to Lore index</a></p>"
             f"<pre>{escape(first_entry)}</pre>"
         )
-        self._send_html(body, title=f"Lore: {topic_path.name}")
+        self._send_html(body, title=f"Lore: {topic_path.name}", site="aha")
 
-    def _send_topic_page(self, page_name: str, base_dir: Path, topic: str, base_route: str) -> None:
+    def _send_topic_page(
+        self, page_name: str, base_dir: Path, topic: str, base_route: str, site: str = "aha"
+    ) -> None:
         topic_path = _safe_topic_path(base_dir, topic)
         if topic_path is None:
             self.send_error(404, "Not Found")
@@ -174,10 +248,10 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             f"<p><a href='/{escape(base_route)}/'>Back to {escape(page_name)} index</a></p>"
             f"<pre>{escape(_read_cached_topic(topic_path))}</pre>"
         )
-        self._send_html(body, title=f"{page_name}: {topic_path.name}")
+        self._send_html(body, title=f"{page_name}: {topic_path.name}", site=site)
 
-    def _send_html(self, body: str, title: str) -> None:
-        page = _build_full_page(title=title, body=body)
+    def _send_html(self, body: str, title: str, site: str = "wol") -> None:
+        page = _build_full_page(title=title, body=body, site=site)
         body_bytes = page.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -220,7 +294,7 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
         who_html = _read_file_if_present(WHO_HTML_FILE)
         who_count = _read_file_if_present(WHO_COUNT_FILE)
 
-        content = ["<h1>ACKMUD Player Activity</h1>", "<p class='muted'>Live snapshot from in-game WHO output.</p>"]
+        content = ["<h1>Who's Online</h1>", "<p class='muted'>Live snapshot from in-game WHO output.</p>"]
         if who_count is not None:
             content.append(who_count)
         else:
@@ -352,6 +426,10 @@ def _build_home_page() -> str:
     return _load_template("home.html")
 
 
+def _build_wol_home_page() -> str:
+    return _load_template("home_wol.html")
+
+
 def _build_world_map_page() -> str:
     return _load_template("world_map.html")
 
@@ -415,12 +493,16 @@ def _read_cached_topic(path: Path) -> str:
         return content
 
 
-def _build_full_page(title: str, body: str) -> str:
+def _build_full_page(title: str, body: str, site: str = "wol") -> str:
+    tagline = _WOL_TAGLINE if site == "wol" else _AHA_TAGLINE
+    nav = _WOL_NAV if site == "wol" else _AHA_NAV
     template = _load_template("base.html")
     return (
         template.replace("__TITLE__", escape(title))
         .replace("__BODY__", body)
         .replace("__SITE_LOGO_SRC__", _site_logo_src())
+        .replace("__TAGLINE__", tagline)
+        .replace("__NAV__", nav)
     )
 
 
