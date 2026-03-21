@@ -324,6 +324,142 @@ class ServerIntegrationTest(unittest.TestCase):
             self.assertEqual(exc.code, 404)
 
     # ------------------------------------------------------------------
+    # POST /update/gsgp and /update/who endpoints
+    # ------------------------------------------------------------------
+
+    def _post(
+        self,
+        path: str,
+        body: bytes,
+        secret: str = "",
+        host: str = "ackmud.com",
+        content_type: str = "application/json",
+    ) -> int:
+        url = f"http://127.0.0.1:{self.port}{path}"
+        headers: dict[str, str] = {"Host": host, "Content-Type": content_type}
+        if secret:
+            headers["X-Update-Secret"] = secret
+        req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+        try:
+            resp = urllib.request.urlopen(req)
+            return resp.status
+        except urllib.error.HTTPError as exc:
+            return exc.code
+
+    def _with_secret(self, secret: str):
+        """Context manager: temporarily set UPDATE_SECRET to *secret*."""
+        import contextlib
+
+        @contextlib.contextmanager
+        def _ctx():
+            original = web_who_server.UPDATE_SECRET
+            web_who_server.UPDATE_SECRET = secret
+            try:
+                yield
+            finally:
+                web_who_server.UPDATE_SECRET = original
+
+        return _ctx()
+
+    def test_update_gsgp_no_secret_configured_returns_403(self) -> None:
+        with self._with_secret(""):
+            status = self._post("/update/gsgp", b'{"active_players":1}')
+            self.assertEqual(status, 403)
+
+    def test_update_gsgp_wrong_secret_returns_403(self) -> None:
+        with self._with_secret("correct"):
+            status = self._post("/update/gsgp", b'{"active_players":1}', secret="wrong")
+            self.assertEqual(status, 403)
+
+    def test_update_gsgp_invalid_json_returns_400(self) -> None:
+        with self._with_secret("s3cr3t"):
+            status = self._post("/update/gsgp", b"not-json", secret="s3cr3t")
+            self.assertEqual(status, 400)
+
+    def test_update_gsgp_empty_body_returns_400(self) -> None:
+        with self._with_secret("s3cr3t"):
+            status = self._post("/update/gsgp", b"", secret="s3cr3t")
+            self.assertEqual(status, 400)
+
+    def test_update_gsgp_writes_file_and_serves_it(self) -> None:
+        payload = {"name": "ACK!MUD TNG", "active_players": 7, "leaderboards": []}
+        gsgp_path = web_who_server.GSGP_FILE
+        try:
+            with self._with_secret("s3cr3t"):
+                status = self._post(
+                    "/update/gsgp", json.dumps(payload).encode(), secret="s3cr3t"
+                )
+            self.assertEqual(status, 204)
+            _, data = self._get_json("/gsgp")
+            self.assertEqual(data["active_players"], 7)
+        finally:
+            if gsgp_path.exists():
+                gsgp_path.unlink()
+
+    def test_update_gsgp_not_on_aha_site(self) -> None:
+        with self._with_secret("s3cr3t"):
+            status = self._post(
+                "/update/gsgp",
+                b'{"active_players":1}',
+                secret="s3cr3t",
+                host="aha.ackmud.com",
+            )
+            self.assertEqual(status, 404)
+
+    def test_update_who_no_secret_configured_returns_403(self) -> None:
+        with self._with_secret(""):
+            status = self._post("/update/who", b'{"who_html":"<li>A</li>"}')
+            self.assertEqual(status, 403)
+
+    def test_update_who_wrong_secret_returns_403(self) -> None:
+        with self._with_secret("correct"):
+            status = self._post(
+                "/update/who", b'{"who_html":"<li>A</li>"}', secret="wrong"
+            )
+            self.assertEqual(status, 403)
+
+    def test_update_who_empty_body_returns_400(self) -> None:
+        with self._with_secret("s3cr3t"):
+            status = self._post("/update/who", b"", secret="s3cr3t")
+            self.assertEqual(status, 400)
+
+    def test_update_who_missing_fields_returns_400(self) -> None:
+        with self._with_secret("s3cr3t"):
+            status = self._post("/update/who", b"{}", secret="s3cr3t")
+            self.assertEqual(status, 400)
+
+    def test_update_who_writes_files_and_serves_them(self) -> None:
+        who_html_path = web_who_server.WHO_HTML_FILE
+        who_count_path = web_who_server.WHO_COUNT_FILE
+        try:
+            payload = {
+                "who_html": "<ul><li>Hero</li></ul>",
+                "who_count": "<p>Players online: 1</p>",
+            }
+            with self._with_secret("s3cr3t"):
+                status = self._post(
+                    "/update/who", json.dumps(payload).encode(), secret="s3cr3t"
+                )
+            self.assertEqual(status, 204)
+            _, body = self._get("/who")
+            self.assertIn("Hero", body)
+            self.assertIn("Players online: 1", body)
+        finally:
+            for p in (who_html_path, who_count_path):
+                if p.exists():
+                    p.unlink()
+
+    def test_update_who_not_on_aha_site(self) -> None:
+        with self._with_secret("s3cr3t"):
+            status = self._post(
+                "/update/who",
+                b'{"who_html":"<li>A</li>"}',
+                secret="s3cr3t",
+                host="aha.ackmud.com",
+            )
+            self.assertEqual(status, 404)
+
+    # ------------------------------------------------------------------
     # Security: path traversal rejected
     # ------------------------------------------------------------------
 

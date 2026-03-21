@@ -19,6 +19,7 @@ ACKTNG_DIR = Path.home() / "acktng"
 WHO_HTML_FILE = ACKTNG_DIR / "soewholist.html"
 WHO_COUNT_FILE = ACKTNG_DIR / "whocount.html"
 GSGP_FILE = WEB_DIR / os.environ.get("GSGP_FILE", "gsgp.json")
+UPDATE_SECRET = os.environ.get("ACK_UPDATE_SECRET", "")
 HELP_DIR = ACKTNG_DIR / "help"
 SHELP_DIR = ACKTNG_DIR / "shelp"
 LORE_DIR = ACKTNG_DIR / "lore"
@@ -228,7 +229,77 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
         self.send_error(404, "Not Found")
 
     def do_POST(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler interface)
+        parsed_url = urlparse(self.path)
+        route = unquote(parsed_url.path)
+        site = _get_site(self.headers)
+
+        if site == "wol" and route in ("/update/gsgp", "/update/gsgp/"):
+            self._handle_update_gsgp()
+            return
+
+        if site == "wol" and route in ("/update/who", "/update/who/"):
+            self._handle_update_who()
+            return
+
         self.send_error(404, "Not Found")
+
+    def _check_update_secret(self) -> bool:
+        """Return True if the request carries a valid update secret."""
+        if not UPDATE_SECRET:
+            return False
+        provided = self.headers.get("X-Update-Secret", "")
+        return provided == UPDATE_SECRET
+
+    def _read_request_body(self) -> bytes:
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        if length <= 0:
+            return b""
+        return self.rfile.read(length)
+
+    def _handle_update_gsgp(self) -> None:
+        if not self._check_update_secret():
+            self.send_error(403, "Forbidden")
+            return
+        body = self._read_request_body()
+        if not body:
+            self.send_error(400, "Bad Request")
+            return
+        try:
+            import json as _json
+            _json.loads(body)  # validate JSON before writing
+        except ValueError:
+            self.send_error(400, "Bad Request")
+            return
+        GSGP_FILE.write_bytes(body)
+        self.send_response(204)
+        self.end_headers()
+
+    def _handle_update_who(self) -> None:
+        if not self._check_update_secret():
+            self.send_error(403, "Forbidden")
+            return
+        body = self._read_request_body()
+        if not body:
+            self.send_error(400, "Bad Request")
+            return
+        try:
+            import json as _json
+            data = _json.loads(body)
+        except ValueError:
+            self.send_error(400, "Bad Request")
+            return
+        who_html = data.get("who_html")
+        who_count = data.get("who_count")
+        if who_html is None and who_count is None:
+            self.send_error(400, "Bad Request")
+            return
+        ACKTNG_DIR.mkdir(parents=True, exist_ok=True)
+        if who_html is not None:
+            WHO_HTML_FILE.write_text(who_html, encoding="utf-8")
+        if who_count is not None:
+            WHO_COUNT_FILE.write_text(who_count, encoding="utf-8")
+        self.send_response(204)
+        self.end_headers()
 
     def _redirect_to(self, location: str) -> None:
         self.send_response(302)
