@@ -23,8 +23,13 @@ apt-get update -y
 apt-get install -y nginx certbot
 
 # ── 2. Prepare ACME webroot ────────────────────────────────────────────────────
+# The webroot is shared: nginx serves it for HTTP-01 challenges, and any
+# process that runs certbot --webroot can point at the same path.
 mkdir -p "$WEBROOT"
 chown www-data:www-data "$WEBROOT"
+# Group-writable so that certbot can write challenge files regardless of which
+# user triggers the renewal (root via cron, or acktng via sudo certbot).
+chmod 775 "$WEBROOT"
 
 # ── 3. Install a minimal HTTP-only nginx config to pass the ACME challenge ─────
 # (We can't install the full config yet because the certificate doesn't exist.)
@@ -73,12 +78,25 @@ ln -sf /etc/nginx/sites-available/ackmud.conf \
 rm -f /etc/nginx/sites-enabled/ackmud-bootstrap.conf \
       /etc/nginx/sites-available/ackmud-bootstrap.conf
 
+# Remove acktng's legacy WSS proxy config if it exists — this file supersedes it.
+if [[ -f /etc/nginx/conf.d/ackmud-wss.conf ]]; then
+    echo "Removing legacy acktng WSS config (/etc/nginx/conf.d/ackmud-wss.conf)."
+    rm -f /etc/nginx/conf.d/ackmud-wss.conf
+fi
+
 nginx -t
 systemctl reload nginx
 
-# ── 6. Install certbot post-renewal hook ──────────────────────────────────────
+# ── 6. Install certbot post-renewal hooks ─────────────────────────────────────
+# Hook 1: reload nginx to serve the new certificate on ports 443/9890/8891/8892.
 install -m 755 "$REPO_DIR/scripts/certbot-post-renew.sh" \
     /etc/letsencrypt/renewal-hooks/post/ackmud-reload-nginx.sh
+
+# Hook 2: restart MUD game server processes (acktng, ack431, ack42).
+# Install from the acktng repo if you prefer to keep it there; the file is
+# included here so the web repo is the single source of truth for the setup.
+install -m 755 "$REPO_DIR/scripts/certbot-post-renew-acktng.sh" \
+    /etc/letsencrypt/renewal-hooks/post/acktng-restart.sh
 
 # ── 7. Ensure certbot timer / cron is active ──────────────────────────────────
 if systemctl list-units --type=timer | grep -q certbot.timer; then
@@ -95,6 +113,10 @@ fi
 echo ""
 echo "Setup complete."
 echo "  nginx is serving HTTPS for $DOMAIN."
-echo "  Certificates will auto-renew; nginx reloads on each renewal."
+echo "  Certificates will auto-renew; nginx and acktng restart on each renewal."
+echo ""
+echo "  To obtain a cert from the acktng side using the shared webroot:"
+echo "    sudo certbot certonly --webroot --webroot-path $WEBROOT \\"
+echo "        --non-interactive --agree-tos --email $EMAIL -d $DOMAIN"
 echo ""
 echo "Next step: run 'make' to start the Python web server on port 8080."
