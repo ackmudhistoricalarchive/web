@@ -37,7 +37,7 @@ chmod 775 "$WEBROOT"
 cat > /etc/nginx/sites-available/ackmud-bootstrap.conf <<'EOF'
 server {
     listen 80;
-    server_name ackmud.com www.ackmud.com;
+    server_name ackmud.com www.ackmud.com aha.ackmud.com;
 
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
@@ -68,7 +68,8 @@ certbot certonly \
     --agree-tos \
     --email "$EMAIL" \
     -d "$DOMAIN" \
-    -d "www.$DOMAIN"
+    -d "www.$DOMAIN" \
+    -d "aha.$DOMAIN"
 
 # ── 5. Install the full nginx config ──────────────────────────────────────────
 cp "$REPO_DIR/nginx/ackmud.conf" /etc/nginx/sites-available/ackmud.conf
