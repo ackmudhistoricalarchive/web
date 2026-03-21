@@ -207,7 +207,7 @@ Defined in `web_who_server.py` and injected into the MUD client template:
 
 | ID | Name | Host | Port |
 |----|------|------|------|
-| `acktng` | ACK!TNG | ackmud.com | 8890 |
+| `acktng` | ACK!TNG | ackmud.com | 9890 |
 | `ack431` | ACK! 4.3.1 | ackmud.com | 8891 |
 | `ack42` | ACK! 4.2 | ackmud.com | 8892 |
 
