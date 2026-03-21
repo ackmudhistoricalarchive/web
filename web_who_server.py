@@ -16,9 +16,9 @@ HOST = "0.0.0.0"
 PORT = int(os.environ.get("ACK_WEB_PORT", "80"))
 WEB_DIR = Path(__file__).resolve().parent
 ACKTNG_DIR = Path.home() / "acktng"
-DATA_DIR = Path.home() / "web" / "data"
-WHO_HTML_FILE = DATA_DIR / "wholist.html"
-GSGP_FILE = DATA_DIR / os.environ.get("GSGP_FILE", "gsgp.json")
+WHO_HTML_FILE = ACKTNG_DIR / "soewholist.html"
+WHO_COUNT_FILE = ACKTNG_DIR / "whocount.html"
+GSGP_FILE = WEB_DIR / os.environ.get("GSGP_FILE", "gsgp.json")
 UPDATE_SECRET = os.environ.get("ACK_UPDATE_SECRET", "")
 HELP_DIR = ACKTNG_DIR / "help"
 SHELP_DIR = ACKTNG_DIR / "shelp"
@@ -289,11 +289,15 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             self.send_error(400, "Bad Request")
             return
         who_html = data.get("who_html")
-        if who_html is None:
+        who_count = data.get("who_count")
+        if who_html is None and who_count is None:
             self.send_error(400, "Bad Request")
             return
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        WHO_HTML_FILE.write_text(who_html, encoding="utf-8")
+        ACKTNG_DIR.mkdir(parents=True, exist_ok=True)
+        if who_html is not None:
+            WHO_HTML_FILE.write_text(who_html, encoding="utf-8")
+        if who_count is not None:
+            WHO_COUNT_FILE.write_text(who_count, encoding="utf-8")
         self.send_response(204)
         self.end_headers()
 
@@ -389,8 +393,14 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
 
     def _build_players_page(self) -> str:
         who_html = _read_file_if_present(WHO_HTML_FILE)
+        who_count = _read_file_if_present(WHO_COUNT_FILE)
 
         content = ["<h1>Who's Online</h1>", "<p class='muted'>Live snapshot from in-game WHO output.</p>"]
+        if who_count is not None:
+            content.append(who_count)
+        else:
+            content.append("<p>Players online: 0</p>")
+
         if who_html is not None:
             content.append(who_html)
         else:
