@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # certbot post-renewal hook: restart acktng MUD server processes after renewal.
 #
-# acktng runs under an auto-restart loop (scripts/startup), not as a systemd
-# service.  Killing the ack binary causes the loop to respawn it, picking up
-# the renewed certificate that nginx now serves on ports 9890, 8891, and 8892.
+# acktng lives at ~/acktng on the server and runs under the auto-restart loop
+# at ~/acktng/scripts/startup, not as a systemd service.  Killing the ack
+# binary causes the loop to respawn it, picking up the renewed certificate that
+# nginx now serves on ports 9890, 8891, and 8892.
 #
 # Install (run once as root):
 #   sudo cp scripts/certbot-post-renew-acktng.sh \

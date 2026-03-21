@@ -16,7 +16,8 @@ set -euo pipefail
 DOMAIN="ackmud.com"
 EMAIL="${CERTBOT_EMAIL:-admin@ackmud.com}"   # override with CERTBOT_EMAIL env var
 WEBROOT="/var/www/certbot"
-REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"  # ~/web
+ACKTNG_DIR="$(dirname "$REPO_DIR")/acktng"    # ~/acktng (sibling of ~/web)
 
 # ── 1. Install packages ────────────────────────────────────────────────────────
 apt-get update -y
@@ -115,8 +116,14 @@ echo "Setup complete."
 echo "  nginx is serving HTTPS for $DOMAIN."
 echo "  Certificates will auto-renew; nginx and acktng restart on each renewal."
 echo ""
-echo "  To obtain a cert from the acktng side using the shared webroot:"
+echo "Server layout:"
+echo "  ~/web    → $REPO_DIR"
+echo "  ~/acktng → $ACKTNG_DIR"
+echo ""
+echo "  To renew the cert manually (from either repo's Makefile):"
+echo "    make -C $REPO_DIR certbot-acktng"
+echo "  or directly:"
 echo "    sudo certbot certonly --webroot --webroot-path $WEBROOT \\"
 echo "        --non-interactive --agree-tos --email $EMAIL -d $DOMAIN"
 echo ""
-echo "Next step: run 'make' to start the Python web server on port 8080."
+echo "Next step: run 'make' in ~/web to start the Python web server on port 8080."
