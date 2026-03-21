@@ -162,6 +162,8 @@ The existing try/except patterns in `_build_topic_page()` already handle missing
 
 ### Content API Implementation Notes
 
+The Content API lives in the **DB repo** (`ackmudhistoricalarchive/acktng` alongside the schema and migration tooling), not in the game server repo. The schema and the API are tightly coupled — a column rename or table restructure should prompt an API update in the same PR, and that co-location enforces it. The game server has no stake in this service.
+
 The Content API queries the tables from the DB schema proposal:
 
 | Web Route | SQL Source |
@@ -198,6 +200,6 @@ The API should be **read-only** and bind to localhost or a private network inter
 
 ## Open Questions
 
-1. **Who owns the Content API?** It could live in the `acktng` repo (game server side) or as a standalone microservice. Recommend: game server repo, since it owns the schema.
+1. **Who owns the Content API?** Resolved: lives in the DB repo (`ackmudhistoricalarchive/acktng`) alongside the schema migrations and tooling.
 2. **Authentication between web server and Content API?** For now, network isolation (localhost/LAN) is sufficient. A shared secret header can be added later if the API needs to be routable across untrusted networks.
 3. **Should the API support full-text search?** PostgreSQL supports `tsvector` full-text search across help/lore content. This could power a richer `/reference?q=` experience than the current substring match. Out of scope for initial implementation but worth planning the endpoint for.
