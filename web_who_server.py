@@ -52,6 +52,7 @@ _WOL_NAV = (
     "<a href='/'>Home</a>"
     "<a href='/who/'>Who</a>"
     "<a href='/mud/'>MUD Client</a>"
+    "<a href='/reference/'>Reference</a>"
     "<a href='https://discord.gg/T24UQV8h' target='_blank' rel='noopener noreferrer'>Discord</a>"
     "<a href='https://aha.ackmud.com/' target='_blank' rel='noopener noreferrer'>Historical Archive</a>"
     "</nav>"
@@ -60,7 +61,6 @@ _WOL_NAV = (
 _AHA_NAV = (
     "<nav>"
     "<a href='/'>Home</a>"
-    "<a href='/reference/'>Reference</a>"
     "<a href='/map/'>Map</a>"
     "<a href='/stories/'>Stories</a>"
     "<a href='https://discord.gg/T24UQV8h' target='_blank' rel='noopener noreferrer'>Discord</a>"
@@ -98,11 +98,11 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             return
 
         if site == "wol":
-            self._handle_wol_route(route)
+            self._handle_wol_route(route, help_query)
         else:
             self._handle_aha_route(route, help_query)
 
-    def _handle_wol_route(self, route: str) -> None:
+    def _handle_wol_route(self, route: str, help_query: str = "") -> None:
         """Routes served on ackmud.com — AHA: World of Lore."""
         if route in ("/",):
             self._send_html(
@@ -126,6 +126,65 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
                 title="AHA: World of Lore — MUD Client",
                 site="wol",
             )
+            return
+
+        if route in ("/help", "/help/", "/helps", "/helps/"):
+            self._redirect_to("/reference/help/")
+            return
+
+        if route in ("/shelp", "/shelp/", "/shelps", "/shelps/"):
+            self._redirect_to("/reference/shelp/")
+            return
+
+        if route in ("/lore", "/lore/", "/lores", "/lores/"):
+            self._redirect_to("/reference/lore/")
+            return
+
+        if route in ("/reference", "/reference/"):
+            self._send_html(
+                _build_reference_page("help", help_query),
+                title="Help Topics",
+                site="wol",
+            )
+            return
+
+        if route in ("/reference/help", "/reference/help/"):
+            self._send_html(
+                _build_reference_page("help", help_query),
+                title="Help Topics",
+                site="wol",
+            )
+            return
+
+        if route in ("/reference/shelp", "/reference/shelp/"):
+            self._send_html(
+                _build_reference_page("shelp", help_query),
+                title="Spell Help Topics",
+                site="wol",
+            )
+            return
+
+        if route in ("/reference/lore", "/reference/lore/"):
+            self._send_html(
+                _build_reference_page("lore", help_query),
+                title="Lore Topics",
+                site="wol",
+            )
+            return
+
+        if route.startswith("/helps/"):
+            topic = route[len("/helps/"):]
+            self._send_topic_page("Help", HELP_DIR, topic, "reference/help", site="wol")
+            return
+
+        if route.startswith("/shelps/"):
+            topic = route[len("/shelps/"):]
+            self._send_topic_page("Spell Help", SHELP_DIR, topic, "reference/shelp", site="wol")
+            return
+
+        if route.startswith("/lores/"):
+            topic = route[len("/lores/"):]
+            self._send_lore_topic_page(topic, site="wol")
             return
 
         self.send_error(404, "Not Found")
@@ -152,65 +211,6 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             )
             return
 
-        if route in ("/help", "/help/", "/helps", "/helps/"):
-            self._redirect_to("/reference/help/")
-            return
-
-        if route in ("/shelp", "/shelp/", "/shelps", "/shelps/"):
-            self._redirect_to("/reference/shelp/")
-            return
-
-        if route in ("/lore", "/lore/", "/lores", "/lores/"):
-            self._redirect_to("/reference/lore/")
-            return
-
-        if route in ("/reference", "/reference/"):
-            self._send_html(
-                _build_reference_page("help", help_query),
-                title="Help Topics",
-                site="aha",
-            )
-            return
-
-        if route in ("/reference/help", "/reference/help/"):
-            self._send_html(
-                _build_reference_page("help", help_query),
-                title="Help Topics",
-                site="aha",
-            )
-            return
-
-        if route in ("/reference/shelp", "/reference/shelp/"):
-            self._send_html(
-                _build_reference_page("shelp", help_query),
-                title="Spell Help Topics",
-                site="aha",
-            )
-            return
-
-        if route in ("/reference/lore", "/reference/lore/"):
-            self._send_html(
-                _build_reference_page("lore", help_query),
-                title="Lore Topics",
-                site="aha",
-            )
-            return
-
-        if route.startswith("/helps/"):
-            topic = route[len("/helps/"):]
-            self._send_topic_page("Help", HELP_DIR, topic, "reference/help", site="aha")
-            return
-
-        if route.startswith("/shelps/"):
-            topic = route[len("/shelps/"):]
-            self._send_topic_page("Spell Help", SHELP_DIR, topic, "reference/shelp", site="aha")
-            return
-
-        if route.startswith("/lores/"):
-            topic = route[len("/lores/"):]
-            self._send_lore_topic_page(topic)
-            return
-
         self.send_error(404, "Not Found")
 
     def do_POST(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler interface)
@@ -221,7 +221,7 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Location", location)
         self.end_headers()
 
-    def _send_lore_topic_page(self, topic: str) -> None:
+    def _send_lore_topic_page(self, topic: str, site: str = "wol") -> None:
         topic_path = _safe_topic_path(LORE_DIR, topic)
         if topic_path is None:
             self.send_error(404, "Not Found")
@@ -233,7 +233,7 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             f"<p><a href='/reference/lore/'>Back to Lore index</a></p>"
             f"<pre>{escape(first_entry)}</pre>"
         )
-        self._send_html(body, title=f"Lore: {topic_path.name}", site="aha")
+        self._send_html(body, title=f"Lore: {topic_path.name}", site=site)
 
     def _send_topic_page(
         self, page_name: str, base_dir: Path, topic: str, base_route: str, site: str = "aha"
