@@ -63,6 +63,7 @@ _WOL_NAV = (
 _AHA_NAV = (
     "<nav>"
     "<a href='/'>Home</a>"
+    "<a href='/mud/'>MUD Client</a>"
     "<a href='https://discord.gg/T24UQV8h' target='_blank' rel='noopener noreferrer'>Discord</a>"
     "<a href='https://github.com/ackmudhistoricalarchive' target='_blank' rel='noopener noreferrer'>Github</a>"
     "<a href='https://ackmud.com/' target='_blank' rel='noopener noreferrer'>World of Lore</a>"
@@ -207,6 +208,14 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             self._send_html(
                 _build_home_page(),
                 title="ACKmud Historical Archive",
+                site="aha",
+            )
+            return
+
+        if route in ("/mud", "/mud/"):
+            self._send_html(
+                _build_mud_client_page(),
+                title="ACKmud Historical Archive — MUD Client",
                 site="aha",
             )
             return

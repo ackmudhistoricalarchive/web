@@ -189,9 +189,8 @@ class ServerIntegrationTest(unittest.TestCase):
         status, _ = self._get_aha("/who")
         self.assertEqual(status, 404)
 
-    def test_aha_mud_404(self) -> None:
-        status, _ = self._get_aha("/mud")
-        self.assertEqual(status, 404)
+    def test_aha_mud_200(self) -> None:
+        self._assert_ok_contains("/mud", "ACKmud Historical Archive", host="aha.ackmud.com")
 
     # ------------------------------------------------------------------
     # Legacy URL redirects (WOL site)
