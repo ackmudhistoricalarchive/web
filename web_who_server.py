@@ -52,6 +52,9 @@ _WOL_NAV = (
     "<a href='/'>Home</a>"
     "<a href='/who/'>Who</a>"
     "<a href='/mud/'>MUD Client</a>"
+    "<a href='/map/'>Map</a>"
+    "<a href='/stories/'>Stories</a>"
+    "<a href='/reference/'>Reference</a>"
     "<a href='https://discord.gg/T24UQV8h' target='_blank' rel='noopener noreferrer'>Discord</a>"
     "<a href='https://aha.ackmud.com/' target='_blank' rel='noopener noreferrer'>Historical Archive</a>"
     "</nav>"
@@ -60,9 +63,7 @@ _WOL_NAV = (
 _AHA_NAV = (
     "<nav>"
     "<a href='/'>Home</a>"
-    "<a href='/reference/'>Reference</a>"
-    "<a href='/map/'>Map</a>"
-    "<a href='/stories/'>Stories</a>"
+    "<a href='/mud/'>MUD Client</a>"
     "<a href='https://discord.gg/T24UQV8h' target='_blank' rel='noopener noreferrer'>Discord</a>"
     "<a href='https://github.com/ackmudhistoricalarchive' target='_blank' rel='noopener noreferrer'>Github</a>"
     "<a href='https://ackmud.com/' target='_blank' rel='noopener noreferrer'>World of Lore</a>"
@@ -98,11 +99,11 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             return
 
         if site == "wol":
-            self._handle_wol_route(route)
+            self._handle_wol_route(route, help_query)
         else:
             self._handle_aha_route(route, help_query)
 
-    def _handle_wol_route(self, route: str) -> None:
+    def _handle_wol_route(self, route: str, help_query: str = "") -> None:
         """Routes served on ackmud.com — AHA: World of Lore."""
         if route in ("/",):
             self._send_html(
@@ -128,27 +129,15 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             )
             return
 
-        self.send_error(404, "Not Found")
-
-    def _handle_aha_route(self, route: str, help_query: str) -> None:
-        """Routes served on aha.ackmud.com — ACKmud Historical Archive."""
-        if route in ("/",):
-            self._send_html(
-                _build_home_page(),
-                title="ACKmud Historical Archive",
-                site="aha",
-            )
-            return
-
         if route in ("/map", "/map/", "/world-map", "/world-map/"):
-            self._send_html(_build_world_map_page(), title="World Map", site="aha")
+            self._send_html(_build_world_map_page(), title="World Map", site="wol")
             return
 
         if route in ("/stories", "/stories/"):
             self._send_html(
                 _build_stories_page(),
                 title="Tales from the Age of Monuments",
-                site="aha",
+                site="wol",
             )
             return
 
@@ -168,7 +157,7 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             self._send_html(
                 _build_reference_page("help", help_query),
                 title="Help Topics",
-                site="aha",
+                site="wol",
             )
             return
 
@@ -176,7 +165,7 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             self._send_html(
                 _build_reference_page("help", help_query),
                 title="Help Topics",
-                site="aha",
+                site="wol",
             )
             return
 
@@ -184,7 +173,7 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             self._send_html(
                 _build_reference_page("shelp", help_query),
                 title="Spell Help Topics",
-                site="aha",
+                site="wol",
             )
             return
 
@@ -192,23 +181,43 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             self._send_html(
                 _build_reference_page("lore", help_query),
                 title="Lore Topics",
-                site="aha",
+                site="wol",
             )
             return
 
         if route.startswith("/helps/"):
             topic = route[len("/helps/"):]
-            self._send_topic_page("Help", HELP_DIR, topic, "reference/help", site="aha")
+            self._send_topic_page("Help", HELP_DIR, topic, "reference/help", site="wol")
             return
 
         if route.startswith("/shelps/"):
             topic = route[len("/shelps/"):]
-            self._send_topic_page("Spell Help", SHELP_DIR, topic, "reference/shelp", site="aha")
+            self._send_topic_page("Spell Help", SHELP_DIR, topic, "reference/shelp", site="wol")
             return
 
         if route.startswith("/lores/"):
             topic = route[len("/lores/"):]
-            self._send_lore_topic_page(topic)
+            self._send_lore_topic_page(topic, site="wol")
+            return
+
+        self.send_error(404, "Not Found")
+
+    def _handle_aha_route(self, route: str, help_query: str) -> None:
+        """Routes served on aha.ackmud.com — ACKmud Historical Archive."""
+        if route in ("/",):
+            self._send_html(
+                _build_home_page(),
+                title="ACKmud Historical Archive",
+                site="aha",
+            )
+            return
+
+        if route in ("/mud", "/mud/"):
+            self._send_html(
+                _build_mud_client_page(),
+                title="ACKmud Historical Archive — MUD Client",
+                site="aha",
+            )
             return
 
         self.send_error(404, "Not Found")
@@ -221,7 +230,7 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Location", location)
         self.end_headers()
 
-    def _send_lore_topic_page(self, topic: str) -> None:
+    def _send_lore_topic_page(self, topic: str, site: str = "wol") -> None:
         topic_path = _safe_topic_path(LORE_DIR, topic)
         if topic_path is None:
             self.send_error(404, "Not Found")
@@ -233,7 +242,7 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             f"<p><a href='/reference/lore/'>Back to Lore index</a></p>"
             f"<pre>{escape(first_entry)}</pre>"
         )
-        self._send_html(body, title=f"Lore: {topic_path.name}", site="aha")
+        self._send_html(body, title=f"Lore: {topic_path.name}", site=site)
 
     def _send_topic_page(
         self, page_name: str, base_dir: Path, topic: str, base_route: str, site: str = "aha"
