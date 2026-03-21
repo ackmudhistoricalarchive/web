@@ -659,11 +659,14 @@
     appendIO(`[Connecting] ${wsUrl}\n`, 'io-system');
     setStatus('Connecting\u2026');
 
+    const isSecure = wsUrl.startsWith('wss://');
+
     try { socket = new WebSocket(wsUrl); }
     catch (err) { appendIO(`[Error] ${err.message}\n`, 'io-system'); socket = null; return; }
 
     socket.addEventListener('open', () => {
-      appendIO(`[Connected] ${selectedWorld().textContent}\n`, 'io-system');
+      const secTag = isSecure ? ' [WSS]' : ' [WS]';
+      appendIO(`[Connected] ${selectedWorld().textContent}${secTag}\n`, 'io-system');
       setStatus('Connected', 'connected');
       setRoomPlaceholder('Waiting for room data\u2026');
       commandInput.focus();
@@ -675,7 +678,16 @@
       socket = null;
     });
     socket.addEventListener('error', () => {
-      appendIO('\n[Error] WebSocket error.\n', 'io-system');
+      if (isSecure) {
+        appendIO(
+          '\n[Error] WSS connection failed. The server does not appear to support' +
+          ' secure WebSocket (wss://) on this endpoint yet.\n' +
+          '[Info] The server admin needs to set up a TLS proxy in front of the game server.\n',
+          'io-system'
+        );
+      } else {
+        appendIO('\n[Error] WebSocket connection failed.\n', 'io-system');
+      }
       setStatus('Error', 'error');
     });
   });
