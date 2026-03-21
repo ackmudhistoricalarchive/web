@@ -399,6 +399,9 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
         content = ["<h1>Who's Online</h1>", "<p class='muted'>Live snapshot from in-game WHO output.</p>"]
         if who_count is not None:
             content.append(who_count)
+        elif who_html is not None:
+            count = who_html.count("<li>")
+            content.append(f"<p>Players online: {count}</p>")
         else:
             content.append("<p>Players online: 0</p>")
 
