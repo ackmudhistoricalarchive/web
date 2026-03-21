@@ -248,15 +248,15 @@ body.mud-fullscreen-active main{
   flex:1;
   height:auto;
 }
-#mud-client-container.mud-fullscreen #mud-panels{
+#mud-client-container.mud-fullscreen #io-panel{
   flex:1;
   height:auto;
 }
 
-/* ── MUD three-panel layout ── */
-#mud-panels{
+/* ── MUD I/O panel (main) ── */
+#io-panel{
   display:flex;
-  flex-direction:row;
+  flex-direction:column;
   height:62vh;
   border:1px solid var(--line);
   border-radius:var(--radius);
@@ -264,36 +264,58 @@ body.mud-fullscreen-active main{
   margin:.5rem 0;
   background:var(--bg);
 }
-.mud-panel{
-  display:flex;
+
+/* ── MUD floating windows (v2 only) ── */
+.float-window{
+  position:fixed;
+  z-index:1000;
+  display:none;
   flex-direction:column;
+  background:var(--bg-card);
+  border:1px solid var(--line-bright);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-lg);
   overflow:hidden;
-  min-width:80px;
+  min-width:180px;
+  min-height:120px;
+  resize:both;
 }
-#map-panel{width:26%;}
-#room-panel{width:26%;}
-#io-panel{flex:1;}
-.panel-header{
+.float-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
   padding:.25rem .55rem;
+  background:rgba(13,20,36,.9);
+  border-bottom:1px solid var(--line);
+  cursor:move;
+  user-select:none;
+  flex-shrink:0;
+}
+.float-title{
   font-size:.72rem;
   font-weight:600;
   color:var(--muted);
-  background:rgba(13,20,36,.85);
-  border-bottom:1px solid var(--line);
-  letter-spacing:.06em;
   text-transform:uppercase;
-  flex-shrink:0;
-  user-select:none;
+  letter-spacing:.06em;
 }
-.panel-divider{
-  width:4px;
-  background:var(--line);
-  cursor:col-resize;
+.float-close{
+  background:none;
+  border:1px solid transparent;
+  color:var(--muted-dim);
+  padding:.05rem .3rem;
+  cursor:pointer;
+  font-size:.75rem;
+  line-height:1.4;
+  border-radius:3px;
   flex-shrink:0;
-  transition:background .15s;
 }
-.panel-divider:hover,.panel-divider.dragging{
-  background:var(--accent);
+.float-close:hover{
+  color:var(--text);
+  border-color:var(--line);
+  background:rgba(255,95,86,.12);
+  filter:none;
+  box-shadow:none;
+  transform:none;
 }
 
 /* ── Room panel content ── */
