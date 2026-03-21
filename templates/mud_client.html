@@ -5,34 +5,37 @@
   <button id='connect-btn' type='button'>Connect</button>
   <button id='disconnect-btn' type='button'>Disconnect</button>
   <span id='mud-status' class='mud-status'></span>
+  <button id='toggle-map-btn' type='button' style='display:none'>Map</button>
+  <button id='toggle-room-btn' type='button' style='display:none'>Room</button>
   <button id='fullscreen-btn' type='button' style='margin-left:auto'>&#x26F6; Fullscreen</button>
 </div>
 
-<div id='mud-panels'>
-  <!-- Live-data: Graphical Map -->
-  <div class='mud-panel' id='map-panel'>
-    <div class='panel-header'>Map</div>
-    <canvas id='map-canvas'></canvas>
-    <div id='map-placeholder'>Connect to a TNG world to view the map.</div>
+<!-- Main I/O panel (always visible) -->
+<div id='io-panel'>
+  <pre id='mud-output' class='mud-output'></pre>
+  <div class='mud-input-bar'>
+    <input id='mud-command' placeholder='Type a command and press Enter' autocomplete='off' spellcheck='false'>
+    <button id='send-btn' type='button'>Send</button>
   </div>
-  <div class='panel-divider' id='divider-left'></div>
+</div>
 
-  <!-- Live-data: Room Description -->
-  <div class='mud-panel' id='room-panel'>
-    <div class='panel-header'>Room</div>
-    <div id='room-content' class='room-content'></div>
+<!-- Floating Map window (v2 servers only) -->
+<div class='float-window' id='map-window'>
+  <div class='float-header' id='map-win-header'>
+    <span class='float-title'>Map</span>
+    <button class='float-close' id='map-close-btn' type='button'>&#10005;</button>
   </div>
-  <div class='panel-divider' id='divider-right'></div>
+  <canvas id='map-canvas'></canvas>
+  <div id='map-placeholder'>Connect to a TNG world to view the map.</div>
+</div>
 
-  <!-- Main I/O with history -->
-  <div class='mud-panel' id='io-panel'>
-    <div class='panel-header'>Output</div>
-    <pre id='mud-output' class='mud-output'></pre>
-    <div class='mud-input-bar'>
-      <input id='mud-command' placeholder='Type a command and press Enter' autocomplete='off' spellcheck='false'>
-      <button id='send-btn' type='button'>Send</button>
-    </div>
+<!-- Floating Room window (v2 servers only) -->
+<div class='float-window' id='room-window'>
+  <div class='float-header' id='room-win-header'>
+    <span class='float-title'>Room</span>
+    <button class='float-close' id='room-close-btn' type='button'>&#10005;</button>
   </div>
+  <div id='room-content' class='room-content'></div>
 </div>
 
 <div id='music-controls' class='mud-controls' style='display:none;align-items:center;gap:8px;flex-wrap:wrap;'>
@@ -61,14 +64,16 @@
   const mudStatus      = document.getElementById('mud-status');
   const fullscreenBtn  = document.getElementById('fullscreen-btn');
   const container      = document.getElementById('mud-client-container');
-  const panels         = document.getElementById('mud-panels');
-  const mapPanel       = document.getElementById('map-panel');
+  const mapWindow      = document.getElementById('map-window');
   const mapCanvas      = document.getElementById('map-canvas');
   const mapPlaceholder = document.getElementById('map-placeholder');
+  const roomWindow     = document.getElementById('room-window');
   const roomContent    = document.getElementById('room-content');
   const ioOutput       = document.getElementById('mud-output');
   const commandInput   = document.getElementById('mud-command');
   const sendBtn        = document.getElementById('send-btn');
+  const toggleMapBtn   = document.getElementById('toggle-map-btn');
+  const toggleRoomBtn  = document.getElementById('toggle-room-btn');
   const musicControls  = document.getElementById('music-controls');
   const musicPlayBtn   = document.getElementById('music-play-btn');
   const musicStopBtn   = document.getElementById('music-stop-btn');
@@ -78,9 +83,11 @@
   const audioNext      = document.getElementById('mud-audio-next');
 
   // ── Runtime state ─────────────────────────────────────────────────────────
-  let socket       = null;
-  let protocolMode = 'unknown'; // 'v1' | 'v2'
-  let fadeTimer    = null;
+  let socket        = null;
+  let protocolMode  = 'unknown'; // 'v1' | 'v2'
+  let fadeTimer     = null;
+  let mapWinClosed  = false;
+  let roomWinClosed = false;
 
   // Room live-data state
   const roomState = {
@@ -316,9 +323,9 @@
   };
 
   const resizeMapCanvas = () => {
-    const headerH = mapPanel.querySelector('.panel-header').offsetHeight;
-    const w = Math.max(1, Math.floor(mapPanel.clientWidth));
-    const h = Math.max(1, Math.floor(mapPanel.clientHeight - headerH));
+    const headerH = mapWindow.querySelector('.float-header')?.offsetHeight ?? 0;
+    const w = Math.max(1, Math.floor(mapWindow.clientWidth));
+    const h = Math.max(1, Math.floor(mapWindow.clientHeight - headerH));
     if (mapCanvas.width !== w || mapCanvas.height !== h) {
       mapCanvas.width  = w;
       mapCanvas.height = h;
@@ -521,15 +528,17 @@
       if (msg?.type === 'music') { handleMusicCommand(msg); return; }
       if (protocolMode !== 'v1') {
         protocolMode = 'v1';
-        setRoomPlaceholder('Legacy connection — no room data available.');
-        setMapPlaceholder('Legacy connection — no map data available.');
+        hideV2Windows();
       }
       appendIO(event.data);
       return;
     }
 
     // v2 tagged path
-    if (protocolMode !== 'v2') protocolMode = 'v2';
+    if (protocolMode !== 'v2') {
+      protocolMode = 'v2';
+      showV2Windows();
+    }
     const category = msg.tag?.split(':')[0] ?? '';
 
     if (category === 'Room')  { routeRoom(msg); return; }
@@ -544,40 +553,88 @@
     appendIO(text, cssClass || undefined);
   };
 
-  // ── Panel resize (drag dividers) ──────────────────────────────────────────
-  const LS_MAP_W  = 'ack.panel.map.pct';
-  const LS_ROOM_W = 'ack.panel.room.pct';
+  // ── Floating window management ────────────────────────────────────────────
+  const LS_MAP_POS   = 'ack.win.map.pos';
+  const LS_MAP_SIZE  = 'ack.win.map.size';
+  const LS_ROOM_POS  = 'ack.win.room.pos';
+  const LS_ROOM_SIZE = 'ack.win.room.size';
 
-  const loadPanelWidths = () => {
-    document.getElementById('map-panel').style.width  = localStorage.getItem(LS_MAP_W)  ?? '26%';
-    document.getElementById('room-panel').style.width = localStorage.getItem(LS_ROOM_W) ?? '26%';
+  const showV2Windows = () => {
+    if (!mapWinClosed)  { mapWindow.style.display  = 'flex'; resizeMapCanvas(); }
+    if (!roomWinClosed) { roomWindow.style.display = 'flex'; }
+    toggleMapBtn.style.display  = '';
+    toggleRoomBtn.style.display = '';
   };
 
-  const setupDivider = (dividerId, leftPanelId, lsKey) => {
-    const divider   = document.getElementById(dividerId);
-    const leftPanel = document.getElementById(leftPanelId);
-    let dragging = false, startX = 0, startW = 0;
+  const hideV2Windows = () => {
+    mapWindow.style.display     = 'none';
+    roomWindow.style.display    = 'none';
+    toggleMapBtn.style.display  = 'none';
+    toggleRoomBtn.style.display = 'none';
+  };
 
-    divider.addEventListener('mousedown', e => {
-      dragging = true; startX = e.clientX; startW = leftPanel.offsetWidth;
-      divider.classList.add('dragging');
-      document.body.style.cssText += ';cursor:col-resize!important;user-select:none!important';
+  const loadWindowPositions = () => {
+    const mp = JSON.parse(localStorage.getItem(LS_MAP_POS)   ?? 'null');
+    const ms = JSON.parse(localStorage.getItem(LS_MAP_SIZE)  ?? 'null');
+    mapWindow.style.left   = mp ? `${mp.x}px` : '20px';
+    mapWindow.style.top    = mp ? `${mp.y}px` : '80px';
+    mapWindow.style.width  = ms ? `${ms.w}px` : '280px';
+    mapWindow.style.height = ms ? `${ms.h}px` : '280px';
+
+    const rp = JSON.parse(localStorage.getItem(LS_ROOM_POS)  ?? 'null');
+    const rs = JSON.parse(localStorage.getItem(LS_ROOM_SIZE) ?? 'null');
+    roomWindow.style.left   = rp ? `${rp.x}px` : `${Math.max(20, window.innerWidth - 280)}px`;
+    roomWindow.style.top    = rp ? `${rp.y}px` : '80px';
+    roomWindow.style.width  = rs ? `${rs.w}px` : '260px';
+    roomWindow.style.height = rs ? `${rs.h}px` : '380px';
+  };
+
+  const makeDraggable = (winEl, headerEl, lsPosKey) => {
+    let dragging = false, ox = 0, oy = 0;
+    headerEl.addEventListener('mousedown', e => {
+      if (e.target.closest('.float-close')) return;
+      dragging = true;
+      const r = winEl.getBoundingClientRect();
+      ox = e.clientX - r.left; oy = e.clientY - r.top;
+      winEl.style.right = 'auto'; winEl.style.bottom = 'auto';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
     });
     document.addEventListener('mousemove', e => {
       if (!dragging) return;
-      const total = panels.offsetWidth;
-      const newW  = Math.max(80, Math.min(startW + (e.clientX - startX), total * 0.55));
-      const pct   = `${((newW / total) * 100).toFixed(1)}%`;
-      leftPanel.style.width = pct;
-      localStorage.setItem(lsKey, pct);
-      if (leftPanelId === 'map-panel') resizeMapCanvas();
+      const x = Math.max(0, Math.min(e.clientX - ox, window.innerWidth  - winEl.offsetWidth));
+      const y = Math.max(0, Math.min(e.clientY - oy, window.innerHeight - winEl.offsetHeight));
+      winEl.style.left = `${x}px`; winEl.style.top = `${y}px`;
     });
     document.addEventListener('mouseup', () => {
       if (!dragging) return;
-      dragging = false; divider.classList.remove('dragging');
-      document.body.style.cursor = ''; document.body.style.userSelect = '';
+      dragging = false;
+      document.body.style.userSelect = '';
+      const r = winEl.getBoundingClientRect();
+      localStorage.setItem(lsPosKey, JSON.stringify({x: Math.round(r.left), y: Math.round(r.top)}));
     });
   };
+
+  // Close buttons
+  document.getElementById('map-close-btn').addEventListener('click', () => {
+    mapWindow.style.display = 'none'; mapWinClosed = true;
+  });
+  document.getElementById('room-close-btn').addEventListener('click', () => {
+    roomWindow.style.display = 'none'; roomWinClosed = true;
+  });
+
+  // Toggle buttons
+  toggleMapBtn.addEventListener('click', () => {
+    const hidden = mapWindow.style.display === 'none';
+    mapWindow.style.display = hidden ? 'flex' : 'none';
+    mapWinClosed = !hidden;
+    if (hidden) resizeMapCanvas();
+  });
+  toggleRoomBtn.addEventListener('click', () => {
+    const hidden = roomWindow.style.display === 'none';
+    roomWindow.style.display = hidden ? 'flex' : 'none';
+    roomWinClosed = !hidden;
+  });
 
   // ── Music controller ──────────────────────────────────────────────────────
   audio.volume = parseFloat(musicVolume.value);
@@ -652,7 +709,10 @@
     const wsUrl = defaultWsUrl();
     if (!wsUrl) { appendIO('[Error] No WebSocket endpoint configured.\n', 'io-system'); return; }
 
-    protocolMode = 'unknown';
+    protocolMode  = 'unknown';
+    mapWinClosed  = false;
+    roomWinClosed = false;
+    hideV2Windows();
     ioOutput.textContent = '';
     setRoomPlaceholder('Connecting\u2026');
     setMapPlaceholder('Connecting\u2026');
@@ -675,6 +735,7 @@
     socket.addEventListener('close', e => {
       appendIO(`\n[Disconnected] code=${e.code} reason=${e.reason || 'none'}\n`, 'io-system');
       setStatus('Disconnected');
+      hideV2Windows();
       socket = null;
     });
     socket.addEventListener('error', () => {
@@ -699,6 +760,7 @@
     try { socket.close(); } catch (_) {}
     appendIO('\n[Disconnected by user]\n', 'io-system');
     setStatus('Disconnected');
+    hideV2Windows();
   });
 
   const sendCommand = () => {
@@ -719,13 +781,23 @@
     if (isFs) { resizeMapCanvas(); ioOutput.scrollTop = ioOutput.scrollHeight; }
   });
 
-  // ── ResizeObserver: keep map canvas pixel-accurate ────────────────────────
-  if (window.ResizeObserver) new ResizeObserver(resizeMapCanvas).observe(mapPanel);
+  // ── ResizeObserver: keep map canvas pixel-accurate & persist sizes ────────
+  if (window.ResizeObserver) {
+    new ResizeObserver(() => {
+      resizeMapCanvas();
+      if (mapWindow.offsetWidth && mapWindow.offsetHeight)
+        localStorage.setItem(LS_MAP_SIZE, JSON.stringify({w: mapWindow.offsetWidth, h: mapWindow.offsetHeight}));
+    }).observe(mapWindow);
+    new ResizeObserver(() => {
+      if (roomWindow.offsetWidth && roomWindow.offsetHeight)
+        localStorage.setItem(LS_ROOM_SIZE, JSON.stringify({w: roomWindow.offsetWidth, h: roomWindow.offsetHeight}));
+    }).observe(roomWindow);
+  }
 
   // ── Init ──────────────────────────────────────────────────────────────────
-  loadPanelWidths();
-  setupDivider('divider-left',  'map-panel',  LS_MAP_W);
-  setupDivider('divider-right', 'room-panel', LS_ROOM_W);
+  loadWindowPositions();
+  makeDraggable(mapWindow,  document.getElementById('map-win-header'),  LS_MAP_POS);
+  makeDraggable(roomWindow, document.getElementById('room-win-header'), LS_ROOM_POS);
   setRoomPlaceholder('Connect to a TNG world to view the room.');
   setMapPlaceholder('Connect to a TNG world to view the map.');
 
