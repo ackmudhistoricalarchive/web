@@ -1,6 +1,6 @@
 .PHONY: all clean test
 
-SERVICE ?= ackmud-web
+SERVICE ?= web-server
 
 all:
 	systemctl restart $(SERVICE)
