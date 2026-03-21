@@ -13,7 +13,7 @@ This means the **client-side code requires no protocol-selection changes**. The 
 
 ## Problem
 
-Modern browsers enforce the **mixed-content policy**: a page loaded over HTTPS is not permitted to open unencrypted (`ws://`) WebSocket connections. Any attempt is silently blocked before the TCP handshake even begins. This means that as soon as `ackmud.com` is served over HTTPS (or when a user accesses it via a browser that upgrades to HTTPS automatically), the MUD client becomes completely non-functional because all three game server endpoints (`ackmud.com:8890`, `:8891`, `:8892`) only accept plain unencrypted WebSocket connections.
+Modern browsers enforce the **mixed-content policy**: a page loaded over HTTPS is not permitted to open unencrypted (`ws://`) WebSocket connections. Any attempt is silently blocked before the TCP handshake even begins. This means that as soon as `ackmud.com` is served over HTTPS (or when a user accesses it via a browser that upgrades to HTTPS automatically), the MUD client becomes completely non-functional because all three game server endpoints (`ackmud.com:9890`, `:8891`, `:8892`) only accept plain unencrypted WebSocket connections.
 
 The client now displays a targeted error message in this case:
 
@@ -38,7 +38,7 @@ The client now displays a targeted error message in this case:
 | `templates/mud_client.html` | WSS-specific error message when secure handshake fails |
 | `web_who_server.py` | None — ports in `WORLD_TARGETS` unchanged |
 
-The `WORLD_TARGETS` in `web_who_server.py` point to the same public ports (`8890`, `8891`, `8892`) that the proxy will occupy, so no server configuration change is needed on the web side.
+The `WORLD_TARGETS` in `web_who_server.py` point to the same public ports (`9890`, `8891`, `8892`) that the proxy will occupy, so no server configuration change is needed on the web side.
 
 ---
 
@@ -50,7 +50,7 @@ This section documents exactly what the game server's WebSocket endpoint must sp
 
 | World | Public URL (after WSS) | Internal (pre-proxy) |
 |---|---|---|
-| ACK!TNG | `wss://ackmud.com:8890/` | `ws://127.0.0.1:18890/` |
+| ACK!TNG | `wss://ackmud.com:9890/` | `ws://127.0.0.1:19890/` |
 | ACK! 4.3.1 | `wss://ackmud.com:8891/` | `ws://127.0.0.1:18891/` |
 | ACK! 4.2 | `wss://ackmud.com:8892/` | `ws://127.0.0.1:18892/` |
 
@@ -164,10 +164,10 @@ The cleanest solution is to place a reverse proxy in front of each WebSocket ser
 
 ```
 Browser
-  │  wss://ackmud.com:8890  (TLS, public internet)
+  │  wss://ackmud.com:9890  (TLS, public internet)
   ▼
 nginx / stunnel                ← terminates TLS, same host as game server
-  │  ws://127.0.0.1:18890     (plain WebSocket, loopback only)
+  │  ws://127.0.0.1:19890     (plain WebSocket, loopback only)
   ▼
 ACK!TNG game server process
 ```
@@ -180,7 +180,7 @@ ACK!TNG game server process
 
 - A valid TLS certificate for `ackmud.com`. [Let's Encrypt](https://letsencrypt.org/) via `certbot` is free and auto-renewing. If the web server already has a certificate for HTTPS, the **same certificate and key files can be reused** for the WebSocket proxy — no separate certificate is needed.
 - `nginx` (preferred) or `stunnel` installed on the game server host.
-- Firewall access to open ports `8890`, `8891`, `8892` for inbound TCP if not already open.
+- Firewall access to open ports `9890`, `8891`, `8892` for inbound TCP if not already open.
 
 ---
 
@@ -192,7 +192,7 @@ Suggested port mapping:
 
 | World | Current public port | New internal port |
 |---|---|---|
-| ACK!TNG | 8890 | 18890 |
+| ACK!TNG | 9890 | 19890 |
 | ACK! 4.3.1 | 8891 | 18891 |
 | ACK! 4.2 | 8892 | 18892 |
 
@@ -202,10 +202,10 @@ Example change if the WebSocket server is Python (`websockets` library):
 
 ```python
 # Before
-await websockets.serve(handler, "0.0.0.0", 8890)
+await websockets.serve(handler, "0.0.0.0", 9890)
 
 # After
-await websockets.serve(handler, "127.0.0.1", 18890)
+await websockets.serve(handler, "127.0.0.1", 19890)
 ```
 
 **The WebSocket handler itself, the MUD game logic, and the message protocol do not change.**
@@ -221,9 +221,9 @@ nginx is the preferred option if it is already installed for the HTTPS web serve
 ```nginx
 # /etc/nginx/conf.d/ackmud-wss.conf
 
-# ── ACK!TNG  — wss://ackmud.com:8890 ──────────────────────────────────────
+# ── ACK!TNG  — wss://ackmud.com:9890 ──────────────────────────────────────
 server {
-    listen      8890 ssl;
+    listen      9890 ssl;
     server_name ackmud.com;
 
     ssl_certificate     /etc/letsencrypt/live/ackmud.com/fullchain.pem;
@@ -232,7 +232,7 @@ server {
     ssl_ciphers         HIGH:!aNULL:!MD5;
 
     location / {
-        proxy_pass           http://127.0.0.1:18890;
+        proxy_pass           http://127.0.0.1:19890;
         proxy_http_version   1.1;
 
         # Required for WebSocket upgrade handshake
@@ -291,7 +291,7 @@ server {
 ```
 
 Notes:
-- nginx listens on the **same public ports** (`8890`, `8891`, `8892`) the web client already targets — no config changes needed on the web server side.
+- nginx listens on the **same public ports** (`9890`, `8891`, `8892`) the web client already targets — no config changes needed on the web server side.
 - `proxy_http_version 1.1` is mandatory; WebSocket upgrade does not work over HTTP/1.0.
 - `Upgrade` and `Connection` headers are required for the HTTP→WebSocket upgrade handshake per RFC 6455 §4.
 - `proxy_read_timeout` / `proxy_send_timeout` are set to one hour so players are not dropped by the proxy before the game's own idle-kick logic fires.
@@ -309,8 +309,8 @@ sudo nginx -t && sudo systemctl reload nginx
 ```ini
 # /etc/stunnel/ackmud.conf
 [acktng]
-accept  = 8890
-connect = 127.0.0.1:18890
+accept  = 9890
+connect = 127.0.0.1:19890
 cert    = /etc/letsencrypt/live/ackmud.com/fullchain.pem
 key     = /etc/letsencrypt/live/ackmud.com/privkey.pem
 
@@ -333,11 +333,11 @@ key     = /etc/letsencrypt/live/ackmud.com/privkey.pem
 
 ### Step 3 — Block the inner ports at the firewall
 
-After the proxy is in place, the inner ports (`18890–18892`) must be blocked from the internet so unencrypted access is impossible:
+After the proxy is in place, the inner ports (`19890`, `18891`, `18892`) must be blocked from the internet so unencrypted access is impossible:
 
 ```bash
 # iptables
-sudo iptables -A INPUT -p tcp --dport 18890 ! -s 127.0.0.1 -j DROP
+sudo iptables -A INPUT -p tcp --dport 19890 ! -s 127.0.0.1 -j DROP
 sudo iptables -A INPUT -p tcp --dport 18891 ! -s 127.0.0.1 -j DROP
 sudo iptables -A INPUT -p tcp --dport 18892 ! -s 127.0.0.1 -j DROP
 
@@ -345,7 +345,7 @@ sudo iptables -A INPUT -p tcp --dport 18892 ! -s 127.0.0.1 -j DROP
 sudo iptables-save > /etc/iptables/rules.v4
 ```
 
-The public-facing ports (`8890`, `8891`, `8892`) remain open.
+The public-facing ports (`9890`, `8891`, `8892`) remain open.
 
 ---
 
@@ -380,7 +380,7 @@ Confirm TLS and the WebSocket upgrade work before opening a browser:
 
 ```bash
 # Should print HTTP/1.1 101 Switching Protocols, confirming WSS is up
-openssl s_client -connect ackmud.com:8890 -quiet 2>/dev/null <<'EOF'
+openssl s_client -connect ackmud.com:9890 -quiet 2>/dev/null <<'EOF'
 GET / HTTP/1.1
 Host: ackmud.com
 Upgrade: websocket
@@ -397,7 +397,7 @@ Verify the inner ports are not reachable from outside the host:
 
 ```bash
 # Should time out or refuse — NOT succeed
-nc -zv ackmud.com 18890
+nc -zv ackmud.com 19890
 ```
 
 ### Browser verification
@@ -405,10 +405,10 @@ nc -zv ackmud.com 18890
 1. Open `https://ackmud.com/mud/`.
 2. Open DevTools → Network → filter **WS**.
 3. Click **Connect** for ACK!TNG. The request should show:
-   - URL: `wss://ackmud.com:8890/`
+   - URL: `wss://ackmud.com:9890/`
    - Status: `101 Switching Protocols`
    - A padlock icon (TLS confirmed by browser)
-4. The client output panel should show `[Connected] ACK!TNG (ackmud.com:8890) [WSS]`.
+4. The client output panel should show `[Connected] ACK!TNG (ackmud.com:9890) [WSS]`.
 5. Type `look` and confirm the game responds with ANSI-coloured room text.
 6. Repeat for ACK! 4.3.1 (`:8891`) and ACK! 4.2 (`:8892`).
 
@@ -420,7 +420,7 @@ nc -zv ackmud.com 18890
 |---|---|
 | `mud_client.html` | None to protocol logic; `[WSS]`/`[WS]` tag and better error messages added |
 | `web_who_server.py` | None — ports in `WORLD_TARGETS` unchanged |
-| Game server bind address | `0.0.0.0:8890–8892` → `127.0.0.1:18890–18892` |
-| TLS proxy (nginx or stunnel) | Add and configure — listens on `8890–8892`, proxies to `18890–18892` |
-| Firewall | Block `18890–18892` from external traffic |
+| Game server bind address | `0.0.0.0:9890, 8891, 8892` → `127.0.0.1:19890, 18891, 18892` |
+| TLS proxy (nginx or stunnel) | Add and configure — listens on `9890, 8891, 8892`, proxies to `19890, 18891, 18892` |
+| Firewall | Block `19890`, `18891`, `18892` from external traffic |
 | TLS certificate | Reuse existing cert; add post-renewal reload hook |
