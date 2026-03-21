@@ -430,8 +430,12 @@ class ServerIntegrationTest(unittest.TestCase):
 
     def test_update_who_writes_files_and_serves_them(self) -> None:
         who_html_path = web_who_server.WHO_HTML_FILE
+        who_count_path = web_who_server.WHO_COUNT_FILE
         try:
-            payload = {"who_html": "<ul><li>Hero</li></ul>"}
+            payload = {
+                "who_html": "<ul><li>Hero</li></ul>",
+                "who_count": "<p>Players online: 1</p>",
+            }
             with self._with_secret("s3cr3t"):
                 status = self._post(
                     "/update/who", json.dumps(payload).encode(), secret="s3cr3t"
@@ -439,9 +443,11 @@ class ServerIntegrationTest(unittest.TestCase):
             self.assertEqual(status, 204)
             _, body = self._get("/who")
             self.assertIn("Hero", body)
+            self.assertIn("Players online: 1", body)
         finally:
-            if who_html_path.exists():
-                who_html_path.unlink()
+            for p in (who_html_path, who_count_path):
+                if p.exists():
+                    p.unlink()
 
     def test_update_who_not_on_aha_site(self) -> None:
         with self._with_secret("s3cr3t"):
