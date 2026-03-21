@@ -162,6 +162,27 @@ Same shape as `Room:Enter`/`Room:Leave` with `entity_type: "object"`.
 `rel_x` / `rel_y` are room offsets from the current room in grid steps.
 `mob_count` on a non-current room is what `scan` would report for that direction.
 
+#### `Map:Scan`
+
+Updates mob counts for directly adjacent rooms without a full map rebuild. Sent after
+an explicit `scan` command or when the server detects the counts have changed.
+
+```json
+{
+  "v": 2,
+  "tag": "Map:Scan",
+  "data": {
+    "north": { "room_id": "4202", "count": 3 },
+    "south": { "room_id": "4200", "count": 0 },
+    "east":  { "room_id": "4205", "count": 1 },
+    "west":  null
+  }
+}
+```
+
+`null` for a direction means no exit (or no change). The client updates `mob_count` on
+the named room object in `mapState.rooms` and schedules a canvas redraw.
+
 #### `Map:Scout`
 
 Extends the map payload with additional rooms visible only to a player with `scout`.
@@ -213,16 +234,28 @@ The three panels are resizable (drag dividers). Sizes are persisted to `localSto
 
 ---
 
-### 2.1 Graphical Map Panel
+### 2.1 Graphical Map Panel (live-data)
 
 **Accepts tags:** `Map`, `Map:Scan`, `Map:Scout`
 
+**Window state: live-data.** The map panel holds no history. A `Map` message
+completely replaces all grid state. `Map:Scan` and `Map:Scout` update the current
+state in-place. There is no concept of a "previous map" — the canvas always reflects
+only the current room's surroundings.
+
 #### 2.1.1 Rendering
 
-- Each room is drawn as a **tile** using a terrain-specific graphical image (PNG/SVG
-  sprite sheet). Tile images are stored under `img/terrain/`.
-- Exit connections between tiles are drawn as thin lines or arrow connectors.
-- The current room is always centred and highlighted with a distinct border.
+- Implemented as an HTML `<canvas>` element sized to fill the panel.
+- Each room is drawn as a **tile** using a terrain-specific PNG loaded from
+  `img/terrain/<terrain>.png`. If the image is absent or fails to load, a solid
+  colour fill is used instead (see fallback colours in §2.1.4), with a 4-character
+  terrain label abbreviation overlaid when the tile is ≥ 28 px wide.
+- Exit connections between tiles are drawn as semi-transparent lines between tile
+  centres, rendered before tiles so they appear underneath.
+- The current room is centred in the grid, highlighted with a `#5b9cf6` border, and
+  has a small player dot drawn at its centre.
+- The canvas is resized to match the panel's pixel dimensions via `ResizeObserver`,
+  with a pixel-accurate redraw scheduled via `requestAnimationFrame` (coalesced).
 - The map is never populated from `look` output — it uses only `Map`/`Map:Scout` data.
 
 #### 2.1.2 Visibility radius — without `scout`
@@ -269,7 +302,28 @@ it is scouted-but-not-seen. Mob counts on the scouted rooms come from `Map:Scout
 | `air` | Sky/cloud |
 | `underground` | Underground stone |
 
-Unknown terrain falls back to a generic grey tile.
+Unknown terrain falls back to a generic dark tile (`#2a2a3a`).
+
+When a tile image is unavailable the client falls back to solid fill colours:
+
+| Terrain | Fallback colour |
+|---------|----------------|
+| `city` | `#4a5568` |
+| `road` | `#8b7355` |
+| `forest` | `#2d6a4f` |
+| `deep_forest` | `#1b4332` |
+| `field` | `#52b788` |
+| `hills` | `#74c69d` |
+| `mountain` | `#6c757d` |
+| `water_swim` | `#4895ef` |
+| `water_noswim` | `#023e8a` |
+| `desert` | `#e9c46a` |
+| `cave` | `#343a40` |
+| `inside` | `#495057` |
+| `air` | `#90e0ef` |
+| `underground` | `#212529` |
+
+A 4-character terrain abbreviation is overlaid on the fill when the tile is ≥ 28 px wide.
 
 ---
 
@@ -280,17 +334,15 @@ Unknown terrain falls back to a generic grey tile.
 
 #### 2.2.1 Window state: live-data
 
-The Room panel has the special `live-data` retention policy:
+The Room panel has the `live-data` retention policy:
 
-- **No scrollback / no history.** The panel contains exactly what is currently in the
-  room, nothing more.
-- The panel is **replaced** on a full `Room` message.
-- The panel is **patched** (delta update) on `Room:Enter`, `Room:Leave`,
-  `Room:ObjectAppear`, `Room:ObjectVanish` — the entity is added to or removed from
-  the appropriate list without re-rendering the whole panel.
+- **No scrollback / no history.** The panel always shows exactly what is currently in
+  the room.
+- On a full `Room` message, all live state (`name`, `description`, `exits`, `mobs`,
+  `players`, `objects`, `extras`) is replaced and `renderRoom()` re-renders from scratch.
+- On delta events, the relevant in-memory map is updated and `renderRoom()` re-renders.
 - Text from tags other than `Room*` is **never** written to this panel.
-- The panel has **no scrollbar** by default (all current content fits); if content
-  overflows, a scrollbar appears but the panel never grows beyond its allocated height.
+- The panel scrolls only when content overflows; it never grows beyond its allocated height.
 
 #### 2.2.2 Panel structure
 
@@ -332,7 +384,7 @@ Standard action-to-command mappings:
 | `attack` | `kill <keyword>` | |
 | `consider` | `consider <keyword>` | |
 | `get` | `get <keyword>` | |
-| `tell` | Opens inline text input, sends `tell <name> <text>` | For players only |
+| `tell` | Pre-fills the command input with `tell <name> ` and focuses it | For players only |
 | `group` | `group <name>` | For players only |
 | `drink` | `drink <keyword>` | For objects with drink action |
 
@@ -347,8 +399,9 @@ actions they are rendered in the dropdown.
 
 #### 2.2.5 Exit chips
 
-Each exit direction is rendered as a small chip/pill button. Clicking sends `go <dir>`
-(or just the direction abbreviation, e.g. `n`, `s`, `e`, `w`, `u`, `d`). Exits are
+Each exit direction is rendered as a small chip/pill button labelled with its
+abbreviation (`N`, `S`, `E`, `W`, `U`, `D`, `NE`, etc.). Clicking sends the direction
+abbreviation as a MUD command (`n`, `s`, `e`, `w`, `u`, `d`, `ne`, etc.). Exits are
 derived from the `Room.exits` array — they are not parsed from look text.
 
 ---
@@ -379,33 +432,56 @@ onWebSocketMessage(event):
   category = msg.tag.split(':')[0]
 
   switch category:
-    case 'Room'   →  roomPanel.apply(msg)
-    case 'Map'    →  mapPanel.apply(msg)
+    case 'Room'   →  routeRoom(msg)
+    case 'Map'    →  routeMap(msg)
     case 'Music'  →  musicController.apply(msg)   // no display
     default       →  ioPanel.append(msg)
 ```
 
-The `roomPanel.apply` function:
+The `routeRoom` function drives Room-panel live-data updates:
 
 ```
-roomPanel.apply(msg):
+routeRoom(msg):
   switch msg.tag:
-    case 'Room'               →  roomPanel.replace(msg.data)
-    case 'Room:Enter'
-    case 'Room:ObjectAppear'  →  roomPanel.addEntity(msg.data)
-    case 'Room:Leave'
-    case 'Room:ObjectVanish'  →  roomPanel.removeEntity(msg.data)
+    case 'Room':
+      replace roomState.{name, description, exits, mobs, players, objects, extras}
+      call renderRoom()
+    case 'Room:Enter' | 'Room:ObjectAppear':
+      add entity to appropriate roomState map
+      call renderRoom()
+    case 'Room:Leave' | 'Room:ObjectVanish':
+      delete entity from appropriate roomState map
+      call renderRoom()
 ```
 
-The `mapPanel.apply` function:
+`renderRoom()` always replaces `#room-content` innerHTML from scratch using the
+current `roomState`. Because `roomState` is the single source of truth and has no
+history, the panel always shows only what is currently in the room.
+
+The `routeMap` function drives Map-panel live-data updates:
 
 ```
-mapPanel.apply(msg):
+routeMap(msg):
   switch msg.tag:
-    case 'Map'        →  mapPanel.rebuildGrid(msg.data)
-    case 'Map:Scan'   →  mapPanel.updateMobCounts(msg.data)
-    case 'Map:Scout'  →  mapPanel.mergeScoutRooms(msg.data)
+    case 'Map':
+      clear mapState.rooms, set currentId, hasScouted=false
+      populate rooms from payload, schedule canvas redraw
+    case 'Map:Scan':
+      update mob_count on named rooms, schedule canvas redraw
+    case 'Map:Scout':
+      set hasScouted=true, merge additional rooms, schedule canvas redraw
 ```
+
+The canvas is redrawn via `requestAnimationFrame` (coalesced — only one frame is
+queued at a time regardless of how many map messages arrive per tick).
+
+### 3.1 I/O panel styling by tag
+
+| Tag | CSS class applied | Visual effect |
+|-----|------------------|---------------|
+| `System` | `io-system` | Muted grey italic |
+| `Communication:Tell` | `io-tell` | Bright cyan (`#a5f3fc`) |
+| All other tags | — | Default monospace colour |
 
 ---
 
