@@ -19,6 +19,8 @@ from pathlib import Path
 WEB_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(WEB_DIR))
 
+import json
+
 import web_who_server  # noqa: E402  (import after sys.path modification)
 
 
@@ -233,6 +235,76 @@ class ServerIntegrationTest(unittest.TestCase):
     # ------------------------------------------------------------------
     # 404 handling
     # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # GSGP endpoint
+    # ------------------------------------------------------------------
+
+    def _get_json(self, path: str, host: str = "ackmud.com") -> tuple[int, dict]:
+        """Return (status_code, parsed_json) for a JSON endpoint."""
+        url = f"http://127.0.0.1:{self.port}{path}"
+        req = urllib.request.Request(url, headers={"Host": host})
+        try:
+            resp = _no_redirect_opener.open(req)
+            return resp.status, json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            return exc.code, {}
+
+    def test_gsgp_returns_200(self) -> None:
+        status, _ = self._get("/gsgp")
+        self.assertEqual(status, 200)
+
+    def test_gsgp_slash_returns_200(self) -> None:
+        status, _ = self._get("/gsgp/")
+        self.assertEqual(status, 200)
+
+    def test_gsgp_content_type_json(self) -> None:
+        url = f"http://127.0.0.1:{self.port}/gsgp"
+        req = urllib.request.Request(url, headers={"Host": "ackmud.com"})
+        resp = _no_redirect_opener.open(req)
+        self.assertIn("application/json", resp.headers.get("Content-Type", ""))
+
+    def test_gsgp_cors_header(self) -> None:
+        url = f"http://127.0.0.1:{self.port}/gsgp"
+        req = urllib.request.Request(url, headers={"Host": "ackmud.com"})
+        resp = _no_redirect_opener.open(req)
+        self.assertEqual(resp.headers.get("Access-Control-Allow-Origin"), "*")
+
+    def test_gsgp_fallback_structure(self) -> None:
+        """Without a gsgp.json file the response should be valid JSON with required keys."""
+        status, data = self._get_json("/gsgp")
+        self.assertEqual(status, 200)
+        self.assertIn("name", data)
+        self.assertIn("active_players", data)
+        self.assertIn("leaderboards", data)
+        self.assertEqual(data["name"], "ACK!MUD TNG")
+        self.assertIsInstance(data["active_players"], int)
+        self.assertIsInstance(data["leaderboards"], list)
+
+    def test_gsgp_serves_file_when_present(self) -> None:
+        """If gsgp.json exists, the endpoint serves its contents."""
+        payload = {
+            "name": "ACK!MUD TNG",
+            "active_players": 3,
+            "leaderboards": [
+                {"name": "Top Players by Level", "entries": [{"name": "Hero", "value": 50}]}
+            ],
+        }
+        gsgp_path = web_who_server.GSGP_FILE
+        try:
+            gsgp_path.write_text(json.dumps(payload), encoding="utf-8")
+            status, data = self._get_json("/gsgp")
+            self.assertEqual(status, 200)
+            self.assertEqual(data["active_players"], 3)
+            self.assertEqual(len(data["leaderboards"]), 1)
+        finally:
+            if gsgp_path.exists():
+                gsgp_path.unlink()
+
+    def test_gsgp_not_on_aha_site(self) -> None:
+        """The /gsgp endpoint is not exposed on the AHA site."""
+        status, _ = self._get("/gsgp", host="aha.ackmud.com")
+        self.assertEqual(status, 404)
 
     def test_unknown_route_404_wol(self) -> None:
         status, _ = self._get("/this-does-not-exist")
