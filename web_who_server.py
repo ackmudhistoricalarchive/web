@@ -18,6 +18,7 @@ WEB_DIR = Path(__file__).resolve().parent
 ACKTNG_DIR = Path.home() / "acktng"
 WHO_HTML_FILE = ACKTNG_DIR / "soewholist.html"
 WHO_COUNT_FILE = ACKTNG_DIR / "whocount.html"
+GSGP_FILE = WEB_DIR / os.environ.get("GSGP_FILE", "gsgp.json")
 HELP_DIR = ACKTNG_DIR / "help"
 SHELP_DIR = ACKTNG_DIR / "shelp"
 LORE_DIR = ACKTNG_DIR / "lore"
@@ -111,6 +112,10 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
                 title="AHA: World of Lore",
                 site="wol",
             )
+            return
+
+        if route in ("/gsgp", "/gsgp/"):
+            self._send_gsgp()
             return
 
         if route in ("/players", "/players/", "/who", "/who/"):
@@ -298,6 +303,22 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt: str, *args: object) -> None:
         return
+
+    def _send_gsgp(self) -> None:
+        if GSGP_FILE.exists() and GSGP_FILE.is_file():
+            body_bytes = GSGP_FILE.read_bytes()
+        else:
+            import json
+            body_bytes = json.dumps(
+                {"name": "ACK!MUD TNG", "active_players": 0, "leaderboards": []},
+                separators=(",", ":"),
+            ).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body_bytes)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body_bytes)
 
     def _build_players_page(self) -> str:
         who_html = _read_file_if_present(WHO_HTML_FILE)
