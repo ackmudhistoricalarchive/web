@@ -1,9 +1,12 @@
-.PHONY: all clean
+.PHONY: all clean test
+
+SERVICE ?= web-server
 
 all:
-	chmod a+x web_who_server.py
-	pkill -f web_who_server.py || true
-	nohup ./web_who_server.py &
+	systemctl restart $(SERVICE)
+
+test:
+	python3 test_integration.py
 
 clean:
 	@:
