@@ -123,13 +123,15 @@ class ServerIntegrationTest(unittest.TestCase):
     def test_wol_mud_client_200(self) -> None:
         self._assert_ok_contains("/mud", "AHA: World of Lore")
 
-    def test_wol_map_404(self) -> None:
-        status, _ = self._get("/map")
-        self.assertEqual(status, 404)
+    def test_wol_map_200(self) -> None:
+        self._assert_ok_contains("/map", "World Map")
 
-    def test_wol_stories_404(self) -> None:
-        status, _ = self._get("/stories")
-        self.assertEqual(status, 404)
+    def test_wol_world_map_alias_200(self) -> None:
+        status, _ = self._get("/world-map")
+        self.assertEqual(status, 200)
+
+    def test_wol_stories_200(self) -> None:
+        self._assert_ok_contains("/stories", "Tales from the Age of Monuments")
 
     def test_wol_reference_200(self) -> None:
         status, body = self._get("/reference/")
@@ -151,15 +153,13 @@ class ServerIntegrationTest(unittest.TestCase):
     def test_aha_home_page_200(self) -> None:
         self._assert_ok_contains("/", "ACKmud Historical Archive", host="aha.ackmud.com")
 
-    def test_aha_map_200(self) -> None:
-        self._assert_ok_contains("/map", "World Map", host="aha.ackmud.com")
+    def test_aha_map_404(self) -> None:
+        status, _ = self._get_aha("/map")
+        self.assertEqual(status, 404)
 
-    def test_aha_world_map_alias_200(self) -> None:
-        status, _ = self._get_aha("/world-map")
-        self.assertEqual(status, 200)
-
-    def test_aha_stories_200(self) -> None:
-        self._assert_ok_contains("/stories", "Tales from the Age of Monuments", host="aha.ackmud.com")
+    def test_aha_stories_404(self) -> None:
+        status, _ = self._get_aha("/stories")
+        self.assertEqual(status, 404)
 
     def test_aha_reference_404(self) -> None:
         status, _ = self._get_aha("/reference/")
@@ -272,12 +272,13 @@ class ServerIntegrationTest(unittest.TestCase):
         _, body = self._get("/")
         self.assertIn("/mud", body)
         self.assertIn("/who", body)
-        self.assertIn("/reference", body)
-
-    def test_aha_home_has_nav_links(self) -> None:
-        _, body = self._get_aha("/")
         self.assertIn("/map", body)
         self.assertIn("/stories", body)
+        self.assertIn("/reference", body)
+
+    def test_aha_home_has_wol_nav_link(self) -> None:
+        _, body = self._get_aha("/")
+        self.assertIn("ackmud.com", body)
 
     def test_mud_client_contains_world_options(self) -> None:
         _, body = self._get("/mud")

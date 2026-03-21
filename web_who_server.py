@@ -52,6 +52,8 @@ _WOL_NAV = (
     "<a href='/'>Home</a>"
     "<a href='/who/'>Who</a>"
     "<a href='/mud/'>MUD Client</a>"
+    "<a href='/map/'>Map</a>"
+    "<a href='/stories/'>Stories</a>"
     "<a href='/reference/'>Reference</a>"
     "<a href='https://discord.gg/T24UQV8h' target='_blank' rel='noopener noreferrer'>Discord</a>"
     "<a href='https://aha.ackmud.com/' target='_blank' rel='noopener noreferrer'>Historical Archive</a>"
@@ -61,8 +63,6 @@ _WOL_NAV = (
 _AHA_NAV = (
     "<nav>"
     "<a href='/'>Home</a>"
-    "<a href='/map/'>Map</a>"
-    "<a href='/stories/'>Stories</a>"
     "<a href='https://discord.gg/T24UQV8h' target='_blank' rel='noopener noreferrer'>Discord</a>"
     "<a href='https://github.com/ackmudhistoricalarchive' target='_blank' rel='noopener noreferrer'>Github</a>"
     "<a href='https://ackmud.com/' target='_blank' rel='noopener noreferrer'>World of Lore</a>"
@@ -124,6 +124,18 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             self._send_html(
                 _build_mud_client_page(),
                 title="AHA: World of Lore — MUD Client",
+                site="wol",
+            )
+            return
+
+        if route in ("/map", "/map/", "/world-map", "/world-map/"):
+            self._send_html(_build_world_map_page(), title="World Map", site="wol")
+            return
+
+        if route in ("/stories", "/stories/"):
+            self._send_html(
+                _build_stories_page(),
+                title="Tales from the Age of Monuments",
                 site="wol",
             )
             return
@@ -195,18 +207,6 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             self._send_html(
                 _build_home_page(),
                 title="ACKmud Historical Archive",
-                site="aha",
-            )
-            return
-
-        if route in ("/map", "/map/", "/world-map", "/world-map/"):
-            self._send_html(_build_world_map_page(), title="World Map", site="aha")
-            return
-
-        if route in ("/stories", "/stories/"):
-            self._send_html(
-                _build_stories_page(),
-                title="Tales from the Age of Monuments",
                 site="aha",
             )
             return
