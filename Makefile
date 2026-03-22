@@ -36,5 +36,12 @@ certbot-acktng:
 		-d ackmud.com \
 		-d www.ackmud.com
 
+# Install and enable the Python web server systemd service, then start it.
+service-install:
+	sudo cp systemd/web-server.service /etc/systemd/system/web-server.service
+	sudo systemctl daemon-reload
+	sudo systemctl enable web-server
+	sudo systemctl restart web-server
+
 clean:
 	@:
