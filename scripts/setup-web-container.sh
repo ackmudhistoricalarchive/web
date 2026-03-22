@@ -115,7 +115,7 @@ fi
 echo ""
 echo "Setup complete."
 echo ""
-echo "  Web server:  https://$DOMAIN  (proxy → 127.0.0.1:8081)"
+echo "  Web server:  https://$DOMAIN  (proxy → 127.0.0.1:8080)"
 echo "  Game API:    http://192.168.1.103:8080  (via ACKTNG_GAME_URL)"
 echo ""
 echo "Next steps:"
