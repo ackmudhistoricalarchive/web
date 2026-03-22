@@ -26,9 +26,9 @@ continue to work by calling the game API on 192.168.1.103 over the LAN.
 192.168.1.103 (acktng)
 ├── nginx (ports 80, 443, 9890, 8891, 8892)
 │   ├── HTTP → HTTPS redirect
-│   ├── HTTPS reverse proxy → Python app (127.0.0.1:8081)
+│   ├── HTTPS reverse proxy → Python app (127.0.0.1:8080)
 │   └── WSS proxies → game servers (127.0.0.1:18890/18891/18892)
-├── Python web server (port 8081, systemd: web-server.service)
+├── Python web server (port 8080, systemd: web-server.service)
 │   └── game API calls → http://localhost:8080/gsgp, /who
 └── MUD game servers + API (ports 8080, 18890, 18891, 18892)
 ```
@@ -42,9 +42,9 @@ continue to work by calling the game API on 192.168.1.103 over the LAN.
 192.168.1.113 (web container)
 ├── nginx (ports 80, 443, 9890, 8891, 8892)
 │   ├── HTTP → HTTPS redirect + ACME webroot
-│   ├── HTTPS reverse proxy → Python app (127.0.0.1:8081)
+│   ├── HTTPS reverse proxy → Python app (127.0.0.1:8080)
 │   └── WSS proxies → game servers (192.168.1.103:18890/18891/18892)
-├── Python web server (port 8081, systemd: web-server.service)
+├── Python web server (port 8080, systemd: web-server.service)
 │   └── game API calls → http://192.168.1.103:8080/gsgp, /who
 └── certbot + Let's Encrypt certs
 ```
@@ -62,7 +62,7 @@ WSS proxy blocks change from `127.0.0.1` to `192.168.1.103`:
 | 8891 | `http://127.0.0.1:18891` | `http://192.168.1.103:18891` |
 | 8892 | `http://127.0.0.1:18892` | `http://192.168.1.103:18892` |
 
-HTTP/HTTPS proxy blocks are unchanged (still `http://127.0.0.1:8081`).
+HTTP/HTTPS proxy blocks are unchanged (still `http://127.0.0.1:8080`).
 
 ### 2. `systemd/web-server.service` — `ACKTNG_GAME_URL`
 Set the game API URL to the acktng host so `/gsgp` and `/who` work over LAN:
