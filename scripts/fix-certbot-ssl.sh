@@ -74,7 +74,11 @@ ln -sf "$BOOTSTRAP_AVAILABLE" "$BOOTSTRAP_ENABLED"
 rm -f "$FULL_ENABLED"
 
 nginx -t
-systemctl reload nginx
+if systemctl is-active --quiet nginx; then
+    systemctl reload nginx
+else
+    systemctl start nginx
+fi
 echo "Bootstrap nginx config active."
 
 # ── 3. Obtain/renew certificate ───────────────────────────────────────────────
@@ -95,7 +99,11 @@ ln -sf "$FULL_AVAILABLE" "$FULL_ENABLED"
 rm -f "$BOOTSTRAP_ENABLED" "$BOOTSTRAP_AVAILABLE"
 
 nginx -t
-systemctl reload nginx
+if systemctl is-active --quiet nginx; then
+    systemctl reload nginx
+else
+    systemctl start nginx
+fi
 
 echo ""
 echo "Done. Certificate obtained and nginx is serving HTTPS for $DOMAIN."
