@@ -95,8 +95,9 @@ systemctl reload nginx
 
 # ── 5. Install and start Python web server ────────────────────────────────────
 echo "==> [5/5] Installing Python web service..."
-install -m 644 "$REPO_DIR/systemd/web-server.service" \
-    /etc/systemd/system/web-server.service
+sed "s|/home/user/web|$REPO_DIR|g" "$REPO_DIR/systemd/web-server.service" \
+    > /etc/systemd/system/web-server.service
+chmod 644 /etc/systemd/system/web-server.service
 systemctl daemon-reload
 systemctl enable web-server
 systemctl restart web-server
