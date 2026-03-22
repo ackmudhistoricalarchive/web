@@ -13,7 +13,7 @@ from threading import Lock
 from urllib.parse import parse_qs, unquote, urlparse
 
 HOST = "0.0.0.0"
-PORT = int(os.environ.get("ACK_WEB_PORT", "80"))
+PORT = int(os.environ.get("ACK_WEB_PORT", "8080"))
 WEB_DIR = Path(__file__).resolve().parent
 DATA_DIR = WEB_DIR / "data"
 ACKTNG_DIR = Path.home() / "acktng"
