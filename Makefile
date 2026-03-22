@@ -36,6 +36,19 @@ certbot-acktng:
 		-d ackmud.com \
 		-d www.ackmud.com
 
+# Install certbot post-renewal hooks so nginx reloads after every cert renewal.
+renewal-hooks-install:
+	sudo mkdir -p /etc/letsencrypt/renewal-hooks/post
+	sudo cp scripts/certbot-post-renew.sh \
+		/etc/letsencrypt/renewal-hooks/post/ackmud-reload-nginx.sh
+	sudo chmod +x \
+		/etc/letsencrypt/renewal-hooks/post/ackmud-reload-nginx.sh
+	sudo cp scripts/certbot-post-renew-acktng.sh \
+		/etc/letsencrypt/renewal-hooks/post/acktng-restart.sh
+	sudo chmod +x \
+		/etc/letsencrypt/renewal-hooks/post/acktng-restart.sh
+	@echo "Renewal hooks installed. Test with: sudo certbot renew --dry-run"
+
 # Install and enable the Python web server systemd service, then start it.
 service-install:
 	sudo cp systemd/web-server.service /etc/systemd/system/web-server.service
