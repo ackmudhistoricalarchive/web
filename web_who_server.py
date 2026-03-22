@@ -28,7 +28,7 @@ TEMPLATE_DIR = WEB_DIR / "templates"
 IMG_DIR = WEB_DIR / "img"
 MP3_DIR = WEB_DIR / "mp3"
 WORLD_TARGETS = [
-    {"id": "acktng", "name": "ACK!TNG", "host": "ackmud.com", "port": 9890, "scheme": "wss"},
+    {"id": "acktng", "name": "ACK!TNG", "host": "ackmud.com", "port": 18890, "scheme": "wss"},
     {"id": "ack431", "name": "ACK! 4.3.1", "host": "ackmud.com", "port": 8891, "scheme": "ws"},
     {"id": "ack42", "name": "ACK! 4.2", "host": "ackmud.com", "port": 8892, "scheme": "ws"},
 ]
