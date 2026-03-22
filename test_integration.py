@@ -3,23 +3,21 @@
 
 from __future__ import annotations
 
+import contextlib
+import json
 import os
 import socket
 import subprocess
 import sys
-import tempfile
 import threading
-import time
 import unittest
 import urllib.error
 import urllib.request
-from http.server import ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 WEB_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(WEB_DIR))
-
-import json
 
 import web_who_server  # noqa: E402  (import after sys.path modification)
 
@@ -39,6 +37,60 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 _no_redirect_opener = urllib.request.build_opener(_NoRedirect())
 
+
+# ── Mock MUD server ────────────────────────────────────────────────────────────
+
+_mock_gsgp_data: dict = {"name": "ACK!MUD TNG", "active_players": 0, "leaderboards": []}
+_mock_wholist_html: str = "<h2>Players Online</h2>\n<ul>\n</ul>"
+
+
+class _MockMUDHandler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:  # noqa: N802
+        if self.path == "/gsgp":
+            body = json.dumps(_mock_gsgp_data, separators=(",", ":")).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        elif self.path == "/wholist":
+            body = _mock_wholist_html.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        else:
+            self.send_error(404, "Not Found")
+
+    def log_message(self, fmt: str, *args: object) -> None:
+        return
+
+
+class _MockMUDServer:
+    """Context manager that runs a mock MUD server and patches ACKTNG_GAME_URL."""
+
+    def __init__(self) -> None:
+        self.port = _free_port()
+        self._server: ThreadingHTTPServer | None = None
+        self._thread: threading.Thread | None = None
+        self._original_url: str = ""
+
+    def __enter__(self) -> "_MockMUDServer":
+        self._server = ThreadingHTTPServer(("127.0.0.1", self.port), _MockMUDHandler)
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+        self._thread.start()
+        self._original_url = web_who_server.ACKTNG_GAME_URL
+        web_who_server.ACKTNG_GAME_URL = f"http://127.0.0.1:{self.port}"
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        web_who_server.ACKTNG_GAME_URL = self._original_url
+        if self._server is not None:
+            self._server.shutdown()
+
+
+# ── Main test class ────────────────────────────────────────────────────────────
 
 class ServerIntegrationTest(unittest.TestCase):
     """Spin up the real server on a random port and exercise every route."""
@@ -236,8 +288,51 @@ class ServerIntegrationTest(unittest.TestCase):
     # 404 handling
     # ------------------------------------------------------------------
 
+    def test_unknown_route_404_wol(self) -> None:
+        status, _ = self._get("/this-does-not-exist")
+        self.assertEqual(status, 404)
+
+    def test_unknown_route_404_aha(self) -> None:
+        status, _ = self._get_aha("/this-does-not-exist")
+        self.assertEqual(status, 404)
+
+    def test_post_returns_404(self) -> None:
+        url = f"http://127.0.0.1:{self.port}/"
+        req = urllib.request.Request(url, data=b"x", method="POST")
+        try:
+            urllib.request.urlopen(req)
+            self.fail("Expected 404 for POST /")
+        except urllib.error.HTTPError as exc:
+            self.assertEqual(exc.code, 404)
+
+    def test_post_update_gsgp_returns_404(self) -> None:
+        """The /update/gsgp endpoint no longer exists."""
+        url = f"http://127.0.0.1:{self.port}/update/gsgp"
+        req = urllib.request.Request(
+            url, data=b'{"active_players":1}', method="POST",
+            headers={"Host": "ackmud.com"},
+        )
+        try:
+            urllib.request.urlopen(req)
+            self.fail("Expected 404 for POST /update/gsgp")
+        except urllib.error.HTTPError as exc:
+            self.assertEqual(exc.code, 404)
+
+    def test_post_update_who_returns_404(self) -> None:
+        """The /update/who endpoint no longer exists."""
+        url = f"http://127.0.0.1:{self.port}/update/who"
+        req = urllib.request.Request(
+            url, data=b'{"who_html":"<li>A</li>"}', method="POST",
+            headers={"Host": "ackmud.com"},
+        )
+        try:
+            urllib.request.urlopen(req)
+            self.fail("Expected 404 for POST /update/who")
+        except urllib.error.HTTPError as exc:
+            self.assertEqual(exc.code, 404)
+
     # ------------------------------------------------------------------
-    # GSGP endpoint
+    # GSGP endpoint — fetches from MUD's /gsgp HTTP endpoint
     # ------------------------------------------------------------------
 
     def _get_json(self, path: str, host: str = "ackmud.com") -> tuple[int, dict]:
@@ -271,193 +366,76 @@ class ServerIntegrationTest(unittest.TestCase):
         self.assertEqual(resp.headers.get("Access-Control-Allow-Origin"), "*")
 
     def test_gsgp_fallback_structure(self) -> None:
-        """Without a gsgp.json file the response should be valid JSON with required keys."""
-        status, data = self._get_json("/gsgp")
-        self.assertEqual(status, 200)
-        self.assertIn("name", data)
-        self.assertIn("active_players", data)
-        self.assertIn("leaderboards", data)
-        self.assertEqual(data["name"], "ACK!MUD TNG")
-        self.assertIsInstance(data["active_players"], int)
-        self.assertIsInstance(data["leaderboards"], list)
+        """When the MUD is unreachable the response must be valid JSON with required keys."""
+        # Point at a port with nothing listening to simulate MUD being down
+        original = web_who_server.ACKTNG_GAME_URL
+        web_who_server.ACKTNG_GAME_URL = "http://127.0.0.1:1"
+        try:
+            status, data = self._get_json("/gsgp")
+            self.assertEqual(status, 200)
+            self.assertIn("name", data)
+            self.assertIn("active_players", data)
+            self.assertIn("leaderboards", data)
+            self.assertEqual(data["name"], "ACK!MUD TNG")
+            self.assertIsInstance(data["active_players"], int)
+            self.assertIsInstance(data["leaderboards"], list)
+        finally:
+            web_who_server.ACKTNG_GAME_URL = original
 
-    def test_gsgp_serves_file_when_present(self) -> None:
-        """If gsgp.json exists, the endpoint serves its contents."""
-        payload = {
+    def test_gsgp_serves_mud_data(self) -> None:
+        """When the MUD is reachable, /gsgp proxies the MUD's /gsgp response."""
+        global _mock_gsgp_data
+        original_data = _mock_gsgp_data.copy()
+        _mock_gsgp_data = {
             "name": "ACK!MUD TNG",
             "active_players": 3,
             "leaderboards": [
                 {"name": "Top Players by Level", "entries": [{"name": "Hero", "value": 50}]}
             ],
         }
-        gsgp_path = web_who_server.GSGP_FILE
         try:
-            gsgp_path.write_text(json.dumps(payload), encoding="utf-8")
-            status, data = self._get_json("/gsgp")
-            self.assertEqual(status, 200)
-            self.assertEqual(data["active_players"], 3)
-            self.assertEqual(len(data["leaderboards"]), 1)
+            with _MockMUDServer():
+                status, data = self._get_json("/gsgp")
+                self.assertEqual(status, 200)
+                self.assertEqual(data["active_players"], 3)
+                self.assertEqual(len(data["leaderboards"]), 1)
         finally:
-            if gsgp_path.exists():
-                gsgp_path.unlink()
+            _mock_gsgp_data = original_data
 
     def test_gsgp_not_on_aha_site(self) -> None:
         """The /gsgp endpoint is not exposed on the AHA site."""
         status, _ = self._get("/gsgp", host="aha.ackmud.com")
         self.assertEqual(status, 404)
 
-    def test_unknown_route_404_wol(self) -> None:
-        status, _ = self._get("/this-does-not-exist")
-        self.assertEqual(status, 404)
-
-    def test_unknown_route_404_aha(self) -> None:
-        status, _ = self._get_aha("/this-does-not-exist")
-        self.assertEqual(status, 404)
-
-    def test_post_returns_404(self) -> None:
-        url = f"http://127.0.0.1:{self.port}/"
-        req = urllib.request.Request(url, data=b"x", method="POST")
-        try:
-            urllib.request.urlopen(req)
-            self.fail("Expected 404 for POST /")
-        except urllib.error.HTTPError as exc:
-            self.assertEqual(exc.code, 404)
-
     # ------------------------------------------------------------------
-    # POST /update/gsgp and /update/who endpoints
+    # Who page — fetches from MUD's /wholist HTTP endpoint
     # ------------------------------------------------------------------
 
-    def _post(
-        self,
-        path: str,
-        body: bytes,
-        secret: str = "",
-        host: str = "ackmud.com",
-        content_type: str = "application/json",
-    ) -> int:
-        url = f"http://127.0.0.1:{self.port}{path}"
-        headers: dict[str, str] = {"Host": host, "Content-Type": content_type}
-        if secret:
-            headers["X-Update-Secret"] = secret
-        req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    def test_who_fallback_shows_zero_players(self) -> None:
+        """When the MUD is unreachable, /who shows 0 players online."""
+        original = web_who_server.ACKTNG_GAME_URL
+        web_who_server.ACKTNG_GAME_URL = "http://127.0.0.1:1"
         try:
-            resp = urllib.request.urlopen(req)
-            return resp.status
-        except urllib.error.HTTPError as exc:
-            return exc.code
-
-    def _with_secret(self, secret: str):
-        """Context manager: temporarily set UPDATE_SECRET to *secret*."""
-        import contextlib
-
-        @contextlib.contextmanager
-        def _ctx():
-            original = web_who_server.UPDATE_SECRET
-            web_who_server.UPDATE_SECRET = secret
-            try:
-                yield
-            finally:
-                web_who_server.UPDATE_SECRET = original
-
-        return _ctx()
-
-    def test_update_gsgp_no_secret_configured_returns_403(self) -> None:
-        with self._with_secret(""):
-            status = self._post("/update/gsgp", b'{"active_players":1}')
-            self.assertEqual(status, 403)
-
-    def test_update_gsgp_wrong_secret_returns_403(self) -> None:
-        with self._with_secret("correct"):
-            status = self._post("/update/gsgp", b'{"active_players":1}', secret="wrong")
-            self.assertEqual(status, 403)
-
-    def test_update_gsgp_invalid_json_returns_400(self) -> None:
-        with self._with_secret("s3cr3t"):
-            status = self._post("/update/gsgp", b"not-json", secret="s3cr3t")
-            self.assertEqual(status, 400)
-
-    def test_update_gsgp_empty_body_returns_400(self) -> None:
-        with self._with_secret("s3cr3t"):
-            status = self._post("/update/gsgp", b"", secret="s3cr3t")
-            self.assertEqual(status, 400)
-
-    def test_update_gsgp_writes_file_and_serves_it(self) -> None:
-        payload = {"name": "ACK!MUD TNG", "active_players": 7, "leaderboards": []}
-        gsgp_path = web_who_server.GSGP_FILE
-        try:
-            with self._with_secret("s3cr3t"):
-                status = self._post(
-                    "/update/gsgp", json.dumps(payload).encode(), secret="s3cr3t"
-                )
-            self.assertEqual(status, 204)
-            _, data = self._get_json("/gsgp")
-            self.assertEqual(data["active_players"], 7)
+            status, body = self._get("/who")
+            self.assertEqual(status, 200)
+            self.assertIn("Players online: 0", body)
         finally:
-            if gsgp_path.exists():
-                gsgp_path.unlink()
+            web_who_server.ACKTNG_GAME_URL = original
 
-    def test_update_gsgp_not_on_aha_site(self) -> None:
-        with self._with_secret("s3cr3t"):
-            status = self._post(
-                "/update/gsgp",
-                b'{"active_players":1}',
-                secret="s3cr3t",
-                host="aha.ackmud.com",
-            )
-            self.assertEqual(status, 404)
-
-    def test_update_who_no_secret_configured_returns_403(self) -> None:
-        with self._with_secret(""):
-            status = self._post("/update/who", b'{"who_html":"<li>A</li>"}')
-            self.assertEqual(status, 403)
-
-    def test_update_who_wrong_secret_returns_403(self) -> None:
-        with self._with_secret("correct"):
-            status = self._post(
-                "/update/who", b'{"who_html":"<li>A</li>"}', secret="wrong"
-            )
-            self.assertEqual(status, 403)
-
-    def test_update_who_empty_body_returns_400(self) -> None:
-        with self._with_secret("s3cr3t"):
-            status = self._post("/update/who", b"", secret="s3cr3t")
-            self.assertEqual(status, 400)
-
-    def test_update_who_missing_fields_returns_400(self) -> None:
-        with self._with_secret("s3cr3t"):
-            status = self._post("/update/who", b"{}", secret="s3cr3t")
-            self.assertEqual(status, 400)
-
-    def test_update_who_writes_files_and_serves_them(self) -> None:
-        who_html_path = web_who_server.WHO_HTML_FILE
-        who_count_path = web_who_server.WHO_COUNT_FILE
+    def test_who_serves_mud_wholist(self) -> None:
+        """When the MUD is reachable, /who proxies the MUD's /wholist response."""
+        global _mock_wholist_html
+        original_html = _mock_wholist_html
+        _mock_wholist_html = "<ul><li>Hero</li><li>Villain</li></ul>"
         try:
-            payload = {
-                "who_html": "<ul><li>Hero</li></ul>",
-                "who_count": "<p>Players online: 1</p>",
-            }
-            with self._with_secret("s3cr3t"):
-                status = self._post(
-                    "/update/who", json.dumps(payload).encode(), secret="s3cr3t"
-                )
-            self.assertEqual(status, 204)
-            _, body = self._get("/who")
-            self.assertIn("Hero", body)
-            self.assertIn("Players online: 1", body)
+            with _MockMUDServer():
+                status, body = self._get("/who")
+                self.assertEqual(status, 200)
+                self.assertIn("Hero", body)
+                self.assertIn("Villain", body)
+                self.assertIn("Players online: 2", body)
         finally:
-            for p in (who_html_path, who_count_path):
-                if p.exists():
-                    p.unlink()
-
-    def test_update_who_not_on_aha_site(self) -> None:
-        with self._with_secret("s3cr3t"):
-            status = self._post(
-                "/update/who",
-                b'{"who_html":"<li>A</li>"}',
-                secret="s3cr3t",
-                host="aha.ackmud.com",
-            )
-            self.assertEqual(status, 404)
+            _mock_wholist_html = original_html
 
     # ------------------------------------------------------------------
     # Security: path traversal rejected
