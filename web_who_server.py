@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import os
 import base64
+import json
 import mimetypes
+import urllib.request
+import urllib.error
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -15,12 +18,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 HOST = "0.0.0.0"
 PORT = int(os.environ.get("ACK_WEB_PORT", "8080"))
 WEB_DIR = Path(__file__).resolve().parent
-DATA_DIR = WEB_DIR / "data"
 ACKTNG_DIR = Path.home() / "acktng"
-WHO_HTML_FILE = DATA_DIR / "wholist.html"
-WHO_COUNT_FILE = DATA_DIR / "whocount.html"
-GSGP_FILE = DATA_DIR / os.environ.get("GSGP_FILE", "gsgp.json")
-UPDATE_SECRET = os.environ.get("ACK_UPDATE_SECRET", "")
+ACKTNG_GAME_URL = os.environ.get("ACKTNG_GAME_URL", "http://localhost:9890")
 HELP_DIR = ACKTNG_DIR / "help"
 SHELP_DIR = ACKTNG_DIR / "shelp"
 LORE_DIR = ACKTNG_DIR / "lore"
@@ -230,77 +229,7 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
         self.send_error(404, "Not Found")
 
     def do_POST(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler interface)
-        parsed_url = urlparse(self.path)
-        route = unquote(parsed_url.path)
-        site = _get_site(self.headers)
-
-        if site == "wol" and route in ("/update/gsgp", "/update/gsgp/"):
-            self._handle_update_gsgp()
-            return
-
-        if site == "wol" and route in ("/update/who", "/update/who/"):
-            self._handle_update_who()
-            return
-
         self.send_error(404, "Not Found")
-
-    def _check_update_secret(self) -> bool:
-        """Return True if the request carries a valid update secret."""
-        if not UPDATE_SECRET:
-            return False
-        provided = self.headers.get("X-Update-Secret", "")
-        return provided == UPDATE_SECRET
-
-    def _read_request_body(self) -> bytes:
-        length = int(self.headers.get("Content-Length", "0") or "0")
-        if length <= 0:
-            return b""
-        return self.rfile.read(length)
-
-    def _handle_update_gsgp(self) -> None:
-        if not self._check_update_secret():
-            self.send_error(403, "Forbidden")
-            return
-        body = self._read_request_body()
-        if not body:
-            self.send_error(400, "Bad Request")
-            return
-        try:
-            import json as _json
-            _json.loads(body)  # validate JSON before writing
-        except ValueError:
-            self.send_error(400, "Bad Request")
-            return
-        GSGP_FILE.write_bytes(body)
-        self.send_response(204)
-        self.end_headers()
-
-    def _handle_update_who(self) -> None:
-        if not self._check_update_secret():
-            self.send_error(403, "Forbidden")
-            return
-        body = self._read_request_body()
-        if not body:
-            self.send_error(400, "Bad Request")
-            return
-        try:
-            import json as _json
-            data = _json.loads(body)
-        except ValueError:
-            self.send_error(400, "Bad Request")
-            return
-        who_html = data.get("who_html")
-        who_count = data.get("who_count")
-        if who_html is None and who_count is None:
-            self.send_error(400, "Bad Request")
-            return
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        if who_html is not None:
-            WHO_HTML_FILE.write_text(who_html, encoding="utf-8")
-        if who_count is not None:
-            WHO_COUNT_FILE.write_text(who_count, encoding="utf-8")
-        self.send_response(204)
-        self.end_headers()
 
     def _redirect_to(self, location: str) -> None:
         self.send_response(302)
@@ -377,10 +306,10 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
         return
 
     def _send_gsgp(self) -> None:
-        if GSGP_FILE.exists() and GSGP_FILE.is_file():
-            body_bytes = GSGP_FILE.read_bytes()
-        else:
-            import json
+        try:
+            with urllib.request.urlopen(f"{ACKTNG_GAME_URL}/gsgp", timeout=3) as resp:
+                body_bytes = resp.read()
+        except Exception:
             body_bytes = json.dumps(
                 {"name": "ACK!MUD TNG", "active_players": 0, "leaderboards": []},
                 separators=(",", ":"),
@@ -393,30 +322,23 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(body_bytes)
 
     def _build_players_page(self) -> str:
-        who_html = _read_file_if_present(WHO_HTML_FILE)
-        who_count = _read_file_if_present(WHO_COUNT_FILE)
+        who_html: str | None = None
+        try:
+            with urllib.request.urlopen(f"{ACKTNG_GAME_URL}/wholist", timeout=3) as resp:
+                who_html = resp.read().decode("utf-8", errors="replace")
+        except Exception:
+            pass
 
         content = ["<h1>Who's Online</h1>", "<p class='muted'>Live snapshot from in-game WHO output.</p>"]
-        if who_count is not None:
-            content.append(who_count)
-        elif who_html is not None:
+        if who_html is not None:
             count = who_html.count("<li>")
             content.append(f"<p>Players online: {count}</p>")
-        else:
-            content.append("<p>Players online: 0</p>")
-
-        if who_html is not None:
             content.append(who_html)
         else:
+            content.append("<p>Players online: 0</p>")
             content.append("<h2>Players Online</h2>\n<ul>\n</ul>")
 
         return "\n".join(content)
-
-
-def _read_file_if_present(path: Path) -> str | None:
-    if not path.exists() or not path.is_file():
-        return None
-    return path.read_text(encoding="utf-8", errors="replace")
 
 
 def _safe_topic_path(base_dir: Path, topic: str) -> Path | None:
