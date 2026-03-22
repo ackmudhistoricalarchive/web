@@ -7,6 +7,7 @@ import os
 import base64
 import json
 import mimetypes
+import sys
 import urllib.request
 import urllib.error
 from html import escape
@@ -309,7 +310,8 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
         try:
             with urllib.request.urlopen(f"{ACKTNG_GAME_URL}/gsgp", timeout=3) as resp:
                 body_bytes = resp.read()
-        except Exception:
+        except Exception as exc:
+            print(f"[gsgp] fetch failed: {exc!r}", file=sys.stderr, flush=True)
             body_bytes = json.dumps(
                 {"name": "ACK!MUD TNG", "active_players": 0, "leaderboards": []},
                 separators=(",", ":"),
@@ -326,8 +328,8 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
         try:
             with urllib.request.urlopen(f"{ACKTNG_GAME_URL}/wholist", timeout=3) as resp:
                 who_html = resp.read().decode("utf-8", errors="replace")
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"[wholist] fetch failed: {exc!r}", file=sys.stderr, flush=True)
 
         content = ["<h1>Who's Online</h1>", "<p class='muted'>Live snapshot from in-game WHO output.</p>"]
         if who_html is not None:
