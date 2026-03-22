@@ -1,4 +1,6 @@
-.PHONY: all clean test nginx-install nginx-reload certbot-acktng
+.PHONY: all clean test nginx-install nginx-reload certbot-acktng service-install renewal-hooks-install
+
+REPO_DIR := $(shell pwd)
 
 SERVICE ?= web-server
 
@@ -50,8 +52,11 @@ renewal-hooks-install:
 	@echo "Renewal hooks installed. Test with: sudo certbot renew --dry-run"
 
 # Install and enable the Python web server systemd service, then start it.
+# Uses the actual repo location (REPO_DIR) so the service works regardless of
+# where the repo is checked out.
 service-install:
-	sudo cp systemd/web-server.service /etc/systemd/system/web-server.service
+	sed 's|/home/user/web|$(REPO_DIR)|g' systemd/web-server.service \
+		| sudo tee /etc/systemd/system/web-server.service > /dev/null
 	sudo systemctl daemon-reload
 	sudo systemctl enable web-server
 	sudo systemctl restart web-server
