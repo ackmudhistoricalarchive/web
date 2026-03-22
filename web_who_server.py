@@ -20,7 +20,7 @@ HOST = "0.0.0.0"
 PORT = int(os.environ.get("ACK_WEB_PORT", "8080"))
 WEB_DIR = Path(__file__).resolve().parent
 ACKTNG_DIR = Path.home() / "acktng"
-ACKTNG_GAME_URL = os.environ.get("ACKTNG_GAME_URL", "http://localhost:9890")
+ACKTNG_GAME_URL = os.environ.get("ACKTNG_GAME_URL", "http://localhost:80")
 HELP_DIR = ACKTNG_DIR / "help"
 SHELP_DIR = ACKTNG_DIR / "shelp"
 LORE_DIR = ACKTNG_DIR / "lore"
@@ -326,10 +326,10 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
     def _build_players_page(self) -> str:
         who_html: str | None = None
         try:
-            with urllib.request.urlopen(f"{ACKTNG_GAME_URL}/wholist", timeout=3) as resp:
+            with urllib.request.urlopen(f"{ACKTNG_GAME_URL}/who", timeout=3) as resp:
                 who_html = resp.read().decode("utf-8", errors="replace")
         except Exception as exc:
-            print(f"[wholist] fetch failed: {exc!r}", file=sys.stderr, flush=True)
+            print(f"[who] fetch failed: {exc!r}", file=sys.stderr, flush=True)
 
         content = ["<h1>Who's Online</h1>", "<p class='muted'>Live snapshot from in-game WHO output.</p>"]
         if who_html is not None:

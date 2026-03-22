@@ -53,7 +53,7 @@ class _MockMUDHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
-        elif self.path == "/wholist":
+        elif self.path == "/who":
             body = _mock_wholist_html.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -408,7 +408,7 @@ class ServerIntegrationTest(unittest.TestCase):
         self.assertEqual(status, 404)
 
     # ------------------------------------------------------------------
-    # Who page — fetches from MUD's /wholist HTTP endpoint
+    # Who page — fetches from MUD's /who HTTP endpoint
     # ------------------------------------------------------------------
 
     def test_who_fallback_shows_zero_players(self) -> None:
@@ -422,8 +422,8 @@ class ServerIntegrationTest(unittest.TestCase):
         finally:
             web_who_server.ACKTNG_GAME_URL = original
 
-    def test_who_serves_mud_wholist(self) -> None:
-        """When the MUD is reachable, /who proxies the MUD's /wholist response."""
+    def test_who_serves_mud_who(self) -> None:
+        """When the MUD is reachable, /who proxies the MUD's /who response."""
         global _mock_wholist_html
         original_html = _mock_wholist_html
         _mock_wholist_html = "<ul><li>Hero</li><li>Villain</li></ul>"
