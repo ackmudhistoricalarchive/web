@@ -468,7 +468,7 @@ class ServerIntegrationTest(unittest.TestCase):
     def test_mud_client_contains_world_options(self) -> None:
         _, body = self._get("/mud")
         self.assertIn("ackmud.com", body)
-        self.assertIn("9890", body)  # ACK!TNG port
+        self.assertIn("18890", body)  # ACK!TNG WSS port (proxied via nginx)
 
     def test_reference_search_form_present(self) -> None:
         _, body = self._get("/reference/help/")

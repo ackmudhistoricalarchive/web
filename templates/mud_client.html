@@ -740,9 +740,8 @@
     socket.addEventListener('error', () => {
       if (isSecure) {
         appendIO(
-          '\n[Error] WSS connection failed. The server does not appear to support' +
-          ' secure WebSocket (wss://) on this endpoint yet.\n' +
-          '[Info] The server admin needs to set up a TLS proxy in front of the game server.\n',
+          '\n[Error] WSS connection failed (code ' + e.code + ').\n' +
+          '[Info] Check that the nginx proxy is running and the SSL certificate is valid.\n',
           'io-system'
         );
       } else {
