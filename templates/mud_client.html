@@ -483,6 +483,7 @@
   const routeMap = msg => {
     switch (msg.tag) {
       case 'Map':
+        showV2Windows();
         mapState.rooms.clear();
         mapState.currentId  = msg.data.current_room_id ?? null;
         mapState.hasScouted = false;
@@ -539,10 +540,7 @@
     }
 
     // v2 tagged path
-    if (protocolMode !== 'v2') {
-      protocolMode = 'v2';
-      showV2Windows();
-    }
+    protocolMode = 'v2';
     const category = msg.tag?.split(':')[0] ?? '';
 
     if (category === 'Room')  { routeRoom(msg); return; }
