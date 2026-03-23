@@ -7,6 +7,8 @@
   <span id='mud-status' class='mud-status'></span>
   <button id='toggle-map-btn' type='button' style='display:none'>Map</button>
   <button id='toggle-room-btn' type='button' style='display:none'>Room</button>
+  <button id='toggle-equip-btn' type='button' style='display:none'>Equip</button>
+  <button id='toggle-char-btn' type='button' style='display:none'>Char</button>
   <button id='fullscreen-btn' type='button' style='margin-left:auto'>&#x26F6; Fullscreen</button>
 </div>
 
@@ -37,6 +39,27 @@
   </div>
   <div id='room-content' class='room-content'></div>
 </div>
+
+<!-- Floating Equipment window (v2 servers only) -->
+<div class='float-window' id='equip-window'>
+  <div class='float-header' id='equip-win-header'>
+    <span class='float-title'>Equipment</span>
+    <button class='float-close' id='equip-close-btn' type='button'>&#10005;</button>
+  </div>
+  <div id='equip-content' class='equip-content'></div>
+</div>
+
+<!-- Floating Character sheet window (v2 servers only) -->
+<div class='float-window' id='char-window'>
+  <div class='float-header' id='char-win-header'>
+    <span class='float-title'>Character</span>
+    <button class='float-close' id='char-close-btn' type='button'>&#10005;</button>
+  </div>
+  <div id='char-content' class='char-content'></div>
+</div>
+
+<!-- Appraise tooltip (shown on equip item mouseover) -->
+<div id='appraise-popup' class='appraise-popup' style='display:none'></div>
 
 <div id='music-controls' class='mud-controls' style='display:none;align-items:center;gap:8px;flex-wrap:wrap;'>
   <span style='opacity:0.7;font-size:0.85em;'>&#9835; Music:</span>
@@ -74,6 +97,13 @@
   const sendBtn        = document.getElementById('send-btn');
   const toggleMapBtn   = document.getElementById('toggle-map-btn');
   const toggleRoomBtn  = document.getElementById('toggle-room-btn');
+  const toggleEquipBtn = document.getElementById('toggle-equip-btn');
+  const toggleCharBtn  = document.getElementById('toggle-char-btn');
+  const equipWindow    = document.getElementById('equip-window');
+  const equipContent   = document.getElementById('equip-content');
+  const charWindow     = document.getElementById('char-window');
+  const charContent    = document.getElementById('char-content');
+  const appraisePopup  = document.getElementById('appraise-popup');
   const musicControls  = document.getElementById('music-controls');
   const musicPlayBtn   = document.getElementById('music-play-btn');
   const musicStopBtn   = document.getElementById('music-stop-btn');
@@ -83,11 +113,13 @@
   const audioNext      = document.getElementById('mud-audio-next');
 
   // ── Runtime state ─────────────────────────────────────────────────────────
-  let socket        = null;
-  let protocolMode  = 'unknown'; // 'v1' | 'v2'
-  let fadeTimer     = null;
-  let mapWinClosed  = false;
-  let roomWinClosed = false;
+  let socket         = null;
+  let protocolMode   = 'unknown'; // 'v1' | 'v2'
+  let fadeTimer      = null;
+  let mapWinClosed   = false;
+  let roomWinClosed  = false;
+  let equipWinClosed = false;
+  let charWinClosed  = false;
 
   // Room live-data state
   const roomState = {
@@ -479,6 +511,132 @@
     }
   };
 
+  // ── Equipment panel ───────────────────────────────────────────────────────
+  const hideAppraisePopup = () => { appraisePopup.style.display = 'none'; };
+
+  const renderAppraisePopup = (data, mouseX, mouseY) => {
+    if (!data) { hideAppraisePopup(); return; }
+    let html = `<div class="appraise-name">${escHtml(data.name)}</div>`;
+    html += `<div class="appraise-type">${escHtml(data.type)}`;
+    if (data.item_class) html += ` \u00b7 ${escHtml(data.item_class)}`;
+    html += '</div>';
+    if (data.armor_class !== undefined) html += `<div>AC: ${data.armor_class}</div>`;
+    if (data.damage_min !== undefined)
+      html += `<div>Dmg: ${data.damage_min}\u2013${data.damage_max} (avg ${data.damage_avg})</div>`;
+    if (data.affects && data.affects.length)
+      for (const a of data.affects)
+        html += `<div>${escHtml(a.stat)}: ${a.modifier > 0 ? '+' : ''}${a.modifier}</div>`;
+    html += `<div class="appraise-meta">Lvl ${data.level} \u00b7 Wt ${data.weight} \u00b7 Cost ${data.cost}</div>`;
+    appraisePopup.innerHTML = html;
+    appraisePopup.style.left = `${mouseX + 14}px`;
+    appraisePopup.style.top  = `${mouseY + 14}px`;
+    appraisePopup.style.display = 'block';
+  };
+
+  // Last appraise mouse position (updated on mousemove over item rows)
+  let appraiseMouseX = 0, appraiseMouseY = 0;
+  let lastAppraiseData = null;
+
+  const renderEquipmentPanel = data => {
+    equipContent.innerHTML = '';
+    hideAppraisePopup();
+    lastAppraiseData = null;
+    if (!data || !data.slots) return;
+    const table = document.createElement('table');
+    table.className = 'equip-table';
+    for (const slot of data.slots) {
+      const tr = document.createElement('tr');
+      const slotTd = document.createElement('td');
+      slotTd.className = 'equip-slot-name';
+      slotTd.textContent = slot.slot_name;
+      const itemTd = document.createElement('td');
+      if (slot.item) {
+        itemTd.className = 'equip-item-name';
+        itemTd.textContent = slot.item.short_descr;
+        itemTd.dataset.itemName = slot.item.short_descr;
+        let hoverTimer = null;
+        itemTd.addEventListener('mouseenter', () => {
+          hoverTimer = setTimeout(() => sendCmd(`appraise ${slot.item.short_descr}`), 300);
+        });
+        itemTd.addEventListener('mouseleave', () => {
+          if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+          hideAppraisePopup();
+          lastAppraiseData = null;
+        });
+        itemTd.addEventListener('mousemove', e => {
+          appraiseMouseX = e.clientX; appraiseMouseY = e.clientY;
+          if (lastAppraiseData) renderAppraisePopup(lastAppraiseData, e.clientX, e.clientY);
+        });
+      } else {
+        itemTd.className = 'equip-item-name equip-empty';
+        itemTd.textContent = 'Nothing';
+      }
+      tr.appendChild(slotTd);
+      tr.appendChild(itemTd);
+      table.appendChild(tr);
+    }
+    equipContent.appendChild(table);
+  };
+
+  // ── Character sheet panel ─────────────────────────────────────────────────
+  const renderScorePanel = data => {
+    charContent.innerHTML = '';
+    if (!data) return;
+    const div = document.createElement('div');
+    div.className = 'char-sheet';
+
+    const header = document.createElement('div');
+    header.className = 'char-header';
+    header.textContent = `${data.name}${data.title || ''} (${data.race})`;
+    div.appendChild(header);
+
+    const mkBar = (label, cur, max, cls) => {
+      const pct = max > 0 ? Math.round(cur / max * 100) : 0;
+      const w = document.createElement('div');
+      w.className = 'char-bar-wrap';
+      w.innerHTML = `<span class="char-bar-label">${label}</span>` +
+        `<div class="char-bar"><div class="char-bar-fill ${cls}" style="width:${pct}%"></div></div>` +
+        `<span class="char-bar-val">${cur}/${max}</span>`;
+      return w;
+    };
+    div.appendChild(mkBar('HP', data.hit,  data.hit_max,  'bar-hp'));
+    div.appendChild(mkBar('MP', data.mana, data.mana_max, 'bar-mp'));
+    div.appendChild(mkBar('MV', data.move, data.move_max, 'bar-mv'));
+
+    const statsDiv = document.createElement('div');
+    statsDiv.className = 'char-stats';
+    for (const [n, cur, max] of [
+      ['STR', data.str, data.str_max], ['INT', data.int, data.int_max],
+      ['WIS', data.wis, data.wis_max], ['DEX', data.dex, data.dex_max],
+      ['CON', data.con, data.con_max],
+    ]) {
+      const s = document.createElement('span');
+      s.className = 'char-stat';
+      s.textContent = `${n}:${cur}/${max}`;
+      statsDiv.appendChild(s);
+    }
+    div.appendChild(statsDiv);
+
+    if (data.classes && data.classes.length) {
+      const cd = document.createElement('div');
+      cd.className = 'char-classes';
+      cd.textContent = data.classes.map(c => `${c.name}:${c.level}`).join(' ');
+      div.appendChild(cd);
+    }
+
+    const ge = document.createElement('div');
+    ge.className = 'char-gold-exp';
+    ge.textContent = `Gold:${data.gold}  Exp:${data.exp}  QP:${data.quest_points}`;
+    div.appendChild(ge);
+
+    const pos = document.createElement('div');
+    pos.className = 'char-position';
+    pos.textContent = `${data.position} \u00b7 ${data.stance}`;
+    div.appendChild(pos);
+
+    charContent.appendChild(div);
+  };
+
   const routeMap = msg => {
     switch (msg.tag) {
       case 'Map':
@@ -542,9 +700,16 @@
     protocolMode = 'v2';
     const category = msg.tag?.split(':')[0] ?? '';
 
-    if (category === 'Room')  { routeRoom(msg); return; }
-    if (category === 'Map')   { routeMap(msg);  return; }
-    if (category === 'Music') { if (msg.data) handleMusicCommand(msg.data); return; }
+    if (category === 'Room')      { routeRoom(msg); return; }
+    if (category === 'Map')       { routeMap(msg);  return; }
+    if (category === 'Music')     { if (msg.data) handleMusicCommand(msg.data); return; }
+    if (msg.tag === 'Equipment')  { renderEquipmentPanel(msg.data); return; }
+    if (msg.tag === 'Score')      { renderScorePanel(msg.data);     return; }
+    if (msg.tag === 'Appraise')   {
+      renderAppraisePopup(msg.data, appraiseMouseX, appraiseMouseY);
+      lastAppraiseData = msg.data;
+      return;
+    }
 
     // All other tags go to the I/O panel
     const text = typeof msg.data === 'string' ? msg.data : JSON.stringify(msg.data);
@@ -555,23 +720,36 @@
   };
 
   // ── Floating window management ────────────────────────────────────────────
-  const LS_MAP_POS   = 'ack.win.map.pos';
-  const LS_MAP_SIZE  = 'ack.win.map.size';
-  const LS_ROOM_POS  = 'ack.win.room.pos';
-  const LS_ROOM_SIZE = 'ack.win.room.size';
+  const LS_MAP_POS    = 'ack.win.map.pos';
+  const LS_MAP_SIZE   = 'ack.win.map.size';
+  const LS_ROOM_POS   = 'ack.win.room.pos';
+  const LS_ROOM_SIZE  = 'ack.win.room.size';
+  const LS_EQUIP_POS  = 'ack.win.equip.pos';
+  const LS_EQUIP_SIZE = 'ack.win.equip.size';
+  const LS_CHAR_POS   = 'ack.win.char.pos';
+  const LS_CHAR_SIZE  = 'ack.win.char.size';
 
   const showV2Windows = () => {
-    if (!mapWinClosed)  { mapWindow.style.display  = 'flex'; resizeMapCanvas(); }
-    if (!roomWinClosed) { roomWindow.style.display = 'flex'; }
-    toggleMapBtn.style.display  = '';
-    toggleRoomBtn.style.display = '';
+    if (!mapWinClosed)   { mapWindow.style.display   = 'flex'; resizeMapCanvas(); }
+    if (!roomWinClosed)  { roomWindow.style.display  = 'flex'; }
+    if (!equipWinClosed) { equipWindow.style.display = 'flex'; }
+    if (!charWinClosed)  { charWindow.style.display  = 'flex'; }
+    toggleMapBtn.style.display   = '';
+    toggleRoomBtn.style.display  = '';
+    toggleEquipBtn.style.display = '';
+    toggleCharBtn.style.display  = '';
   };
 
   const hideV2Windows = () => {
-    mapWindow.style.display     = 'none';
-    roomWindow.style.display    = 'none';
-    toggleMapBtn.style.display  = 'none';
-    toggleRoomBtn.style.display = 'none';
+    mapWindow.style.display      = 'none';
+    roomWindow.style.display     = 'none';
+    equipWindow.style.display    = 'none';
+    charWindow.style.display     = 'none';
+    toggleMapBtn.style.display   = 'none';
+    toggleRoomBtn.style.display  = 'none';
+    toggleEquipBtn.style.display = 'none';
+    toggleCharBtn.style.display  = 'none';
+    hideAppraisePopup();
   };
 
   const loadWindowPositions = () => {
@@ -588,6 +766,20 @@
     roomWindow.style.top    = rp ? `${rp.y}px` : '80px';
     roomWindow.style.width  = rs ? `${rs.w}px` : '260px';
     roomWindow.style.height = rs ? `${rs.h}px` : '380px';
+
+    const ep = JSON.parse(localStorage.getItem(LS_EQUIP_POS)  ?? 'null');
+    const es = JSON.parse(localStorage.getItem(LS_EQUIP_SIZE) ?? 'null');
+    equipWindow.style.left   = ep ? `${ep.x}px` : '320px';
+    equipWindow.style.top    = ep ? `${ep.y}px` : '80px';
+    equipWindow.style.width  = es ? `${es.w}px` : '240px';
+    equipWindow.style.height = es ? `${es.h}px` : '380px';
+
+    const cp = JSON.parse(localStorage.getItem(LS_CHAR_POS)  ?? 'null');
+    const cs = JSON.parse(localStorage.getItem(LS_CHAR_SIZE) ?? 'null');
+    charWindow.style.left   = cp ? `${cp.x}px` : '320px';
+    charWindow.style.top    = cp ? `${cp.y}px` : '80px';
+    charWindow.style.width  = cs ? `${cs.w}px` : '260px';
+    charWindow.style.height = cs ? `${cs.h}px` : '420px';
   };
 
   const makeDraggable = (winEl, headerEl, lsPosKey) => {
@@ -623,6 +815,12 @@
   document.getElementById('room-close-btn').addEventListener('click', () => {
     roomWindow.style.display = 'none'; roomWinClosed = true;
   });
+  document.getElementById('equip-close-btn').addEventListener('click', () => {
+    equipWindow.style.display = 'none'; equipWinClosed = true; hideAppraisePopup();
+  });
+  document.getElementById('char-close-btn').addEventListener('click', () => {
+    charWindow.style.display = 'none'; charWinClosed = true;
+  });
 
   // Toggle buttons
   toggleMapBtn.addEventListener('click', () => {
@@ -635,6 +833,17 @@
     const hidden = roomWindow.style.display === 'none';
     roomWindow.style.display = hidden ? 'flex' : 'none';
     roomWinClosed = !hidden;
+  });
+  toggleEquipBtn.addEventListener('click', () => {
+    const hidden = equipWindow.style.display === 'none';
+    equipWindow.style.display = hidden ? 'flex' : 'none';
+    equipWinClosed = !hidden;
+    if (!hidden) hideAppraisePopup();
+  });
+  toggleCharBtn.addEventListener('click', () => {
+    const hidden = charWindow.style.display === 'none';
+    charWindow.style.display = hidden ? 'flex' : 'none';
+    charWinClosed = !hidden;
   });
 
   // ── Music controller ──────────────────────────────────────────────────────
@@ -709,9 +918,11 @@
     const wsUrl = defaultWsUrl();
     if (!wsUrl) { appendIO('[Error] No WebSocket endpoint configured.\n', 'io-system'); return; }
 
-    protocolMode  = 'unknown';
-    mapWinClosed  = false;
-    roomWinClosed = false;
+    protocolMode   = 'unknown';
+    mapWinClosed   = false;
+    roomWinClosed  = false;
+    equipWinClosed = false;
+    charWinClosed  = false;
     hideV2Windows();
     ioOutput.textContent = '';
     setRoomPlaceholder('Connecting\u2026');
@@ -790,13 +1001,23 @@
       if (roomWindow.offsetWidth && roomWindow.offsetHeight)
         localStorage.setItem(LS_ROOM_SIZE, JSON.stringify({w: roomWindow.offsetWidth, h: roomWindow.offsetHeight}));
     }).observe(roomWindow);
+    new ResizeObserver(() => {
+      if (equipWindow.offsetWidth && equipWindow.offsetHeight)
+        localStorage.setItem(LS_EQUIP_SIZE, JSON.stringify({w: equipWindow.offsetWidth, h: equipWindow.offsetHeight}));
+    }).observe(equipWindow);
+    new ResizeObserver(() => {
+      if (charWindow.offsetWidth && charWindow.offsetHeight)
+        localStorage.setItem(LS_CHAR_SIZE, JSON.stringify({w: charWindow.offsetWidth, h: charWindow.offsetHeight}));
+    }).observe(charWindow);
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────
   hideV2Windows();
   loadWindowPositions();
-  makeDraggable(mapWindow,  document.getElementById('map-win-header'),  LS_MAP_POS);
-  makeDraggable(roomWindow, document.getElementById('room-win-header'), LS_ROOM_POS);
+  makeDraggable(mapWindow,   document.getElementById('map-win-header'),   LS_MAP_POS);
+  makeDraggable(roomWindow,  document.getElementById('room-win-header'),  LS_ROOM_POS);
+  makeDraggable(equipWindow, document.getElementById('equip-win-header'), LS_EQUIP_POS);
+  makeDraggable(charWindow,  document.getElementById('char-win-header'),  LS_CHAR_POS);
   setRoomPlaceholder('Connect to a TNG world to view the room.');
   setMapPlaceholder('Connect to a TNG world to view the map.');
 
