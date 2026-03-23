@@ -172,7 +172,6 @@
   const sendCmd = cmd => {
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
     socket.send(`${cmd}\n`);
-    appendIO(`\n> ${cmd}\n`);
     commandInput.value = '';
   };
 
@@ -767,7 +766,6 @@
     const cmd = commandInput.value.trim();
     if (!cmd || !socket || socket.readyState !== WebSocket.OPEN) return;
     socket.send(`${commandInput.value}\n`);
-    appendIO(`\n> ${commandInput.value}\n`);
     commandInput.value = '';
   };
   sendBtn.addEventListener('click', sendCommand);
