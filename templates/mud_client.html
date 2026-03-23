@@ -163,7 +163,7 @@
   const appendIO = (text, cssClass) => {
     const span = document.createElement('span');
     if (cssClass) span.className = cssClass;
-    span.innerHTML = ansiToHtml(text);
+    span.innerHTML = ansiToHtml(text.replaceAll('\r', ''));
     ioOutput.appendChild(span);
     ioOutput.scrollTop = ioOutput.scrollHeight;
   };
@@ -496,6 +496,8 @@
 
       case 'Map:Scan':
         // data: { north:{room_id,count}, south:{...}, east:{...}, west:{...} }
+        // Reset all mob counts first so only scanned rooms show badges.
+        for (const r of mapState.rooms.values()) r.mob_count = 0;
         for (const info of Object.values(msg.data)) {
           if (!info) continue;
           const r = mapState.rooms.get(info.room_id);
@@ -506,6 +508,8 @@
 
       case 'Map:Scout':
         mapState.hasScouted = true;
+        // Reset all mob counts first so only scouted cardinal rooms show badges.
+        for (const r of mapState.rooms.values()) r.mob_count = 0;
         for (const r of msg.data.rooms ?? []) {
           mapState.rooms.set(r.id, { ...mapState.rooms.get(r.id), ...r });
           loadTerrainImage(r.terrain ?? 'inside');
@@ -793,6 +797,7 @@
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────
+  hideV2Windows();
   loadWindowPositions();
   makeDraggable(mapWindow,  document.getElementById('map-win-header'),  LS_MAP_POS);
   makeDraggable(roomWindow, document.getElementById('room-win-header'), LS_ROOM_POS);
