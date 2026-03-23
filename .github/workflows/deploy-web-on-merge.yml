@@ -18,8 +18,13 @@ jobs:
       - name: Pull latest code and rebuild web on server
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
+          # GitHub Actions cannot reach the web server (192.168.1.113) directly.
+          # Jump through the game server (ackmud.com) using shared credentials.
+          proxy_host: ${{ secrets.DEPLOY_HOST }}
+          proxy_username: ${{ secrets.DEPLOY_USER }}
+          proxy_key: ${{ secrets.DEPLOY_KEY }}
+          host: 192.168.1.113
+          username: root
           key: ${{ secrets.DEPLOY_KEY }}
           script: |
             set -e
@@ -27,10 +32,8 @@ jobs:
             git stash
             git pull origin main
             make
-            # Install nginx config if it has changed and nginx is available
-            if command -v nginx >/dev/null 2>&1; then
-              sudo cp nginx/ackmud.conf /etc/nginx/sites-available/ackmud.conf
-              sudo ln -sf /etc/nginx/sites-available/ackmud.conf /etc/nginx/sites-enabled/ackmud.conf
-              sudo nginx -t && sudo systemctl reload nginx
-            fi
+            # Install/reload nginx config
+            cp nginx/ackmud.conf /etc/nginx/sites-available/ackmud.conf
+            ln -sf /etc/nginx/sites-available/ackmud.conf /etc/nginx/sites-enabled/ackmud.conf
+            nginx -t && systemctl reload nginx
             echo "Web build complete."
