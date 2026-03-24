@@ -8,6 +8,7 @@
   <button id='toggle-map-btn' type='button' style='display:none'>Map</button>
   <button id='toggle-room-btn' type='button' style='display:none'>Room</button>
   <button id='toggle-equip-btn' type='button' style='display:none'>Equip</button>
+  <button id='toggle-inv-btn' type='button' style='display:none'>Inv</button>
   <button id='toggle-char-btn' type='button' style='display:none'>Char</button>
   <button id='fullscreen-btn' type='button' style='margin-left:auto'>&#x26F6; Fullscreen</button>
 </div>
@@ -47,6 +48,15 @@
     <button class='float-close' id='equip-close-btn' type='button'>&#10005;</button>
   </div>
   <div id='equip-content' class='equip-content'></div>
+</div>
+
+<!-- Floating Inventory window (v2 servers only) -->
+<div class='float-window' id='inv-window'>
+  <div class='float-header' id='inv-win-header'>
+    <span class='float-title'>Inventory</span>
+    <button class='float-close' id='inv-close-btn' type='button'>&#10005;</button>
+  </div>
+  <div id='inv-content' class='inv-content'></div>
 </div>
 
 <!-- Floating Character sheet window (v2 servers only) -->
@@ -98,9 +108,12 @@
   const toggleMapBtn   = document.getElementById('toggle-map-btn');
   const toggleRoomBtn  = document.getElementById('toggle-room-btn');
   const toggleEquipBtn = document.getElementById('toggle-equip-btn');
+  const toggleInvBtn   = document.getElementById('toggle-inv-btn');
   const toggleCharBtn  = document.getElementById('toggle-char-btn');
   const equipWindow    = document.getElementById('equip-window');
   const equipContent   = document.getElementById('equip-content');
+  const invWindow      = document.getElementById('inv-window');
+  const invContent     = document.getElementById('inv-content');
   const charWindow     = document.getElementById('char-window');
   const charContent    = document.getElementById('char-content');
   const appraisePopup  = document.getElementById('appraise-popup');
@@ -119,6 +132,7 @@
   let mapWinClosed   = false;
   let roomWinClosed  = false;
   let equipWinClosed = true;
+  let invWinClosed   = true;
   let charWinClosed  = true;
 
   // Room live-data state
@@ -252,13 +266,31 @@
     return action === 'attack' ? `kill ${kw}` : `${action} ${kw}`;
   };
 
-  const buildEntityRow = (entity, isPlayer) => {
+  const buildEntityRow = (entity, isPlayer, itemData) => {
     const row = document.createElement('div');
     row.className = 'entity-row';
 
     const nameEl = document.createElement('span');
     nameEl.className = 'entity-name';
-    nameEl.textContent = entity.name ?? entity.keyword ?? '(unknown)';
+    nameEl.innerHTML = itemData ? ackColorToHtml(entity.name ?? entity.keyword ?? '(unknown)')
+                                : escHtml(entity.name ?? entity.keyword ?? '(unknown)');
+
+    if (itemData) {
+      nameEl.style.cursor = 'help';
+      nameEl.addEventListener('mouseenter', e => {
+        appraiseMouseX = e.clientX; appraiseMouseY = e.clientY;
+        lastAppraiseData = itemData;
+        renderAppraisePopup(itemData, e.clientX, e.clientY);
+      });
+      nameEl.addEventListener('mouseleave', () => {
+        hideAppraisePopup();
+        lastAppraiseData = null;
+      });
+      nameEl.addEventListener('mousemove', e => {
+        appraiseMouseX = e.clientX; appraiseMouseY = e.clientY;
+        if (lastAppraiseData) renderAppraisePopup(lastAppraiseData, e.clientX, e.clientY);
+      });
+    }
     row.appendChild(nameEl);
 
     if (entity.actions?.length) {
@@ -337,19 +369,22 @@
       roomContent.appendChild(exitsEl);
     }
 
-    const addSection = (title, items, isPlayer) => {
+    const addSection = (title, items, isPlayer, withItemData) => {
       if (!items.length) return;
       const titleEl = document.createElement('div');
       titleEl.className = 'room-section-title';
       titleEl.textContent = title;
       roomContent.appendChild(titleEl);
-      for (const item of items) roomContent.appendChild(buildEntityRow(item, isPlayer));
+      for (const item of items) {
+        const itemData = withItemData ? (item.type ? item : null) : null;
+        roomContent.appendChild(buildEntityRow(item, isPlayer, itemData));
+      }
     };
 
-    addSection('Mobs',    Array.from(roomState.mobs.values()),    false);
-    addSection('Players', Array.from(roomState.players.values()), true);
-    addSection('Objects', Array.from(roomState.objects.values()), false);
-    addSection('Extras',  roomState.extras,                       false);
+    addSection('Mobs',    Array.from(roomState.mobs.values()),    false, false);
+    addSection('Players', Array.from(roomState.players.values()), true,  false);
+    addSection('Objects', Array.from(roomState.objects.values()), false, true);
+    addSection('Extras',  roomState.extras,                       false, false);
   };
 
   const setRoomPlaceholder = text => {
@@ -599,6 +634,20 @@
     equipContent.appendChild(table);
   };
 
+  // ── Inventory panel ───────────────────────────────────────────────────────
+  const renderInventoryPanel = data => {
+    invContent.innerHTML = '';
+    hideAppraisePopup();
+    lastAppraiseData = null;
+    if (!data || !data.items || !data.items.length) {
+      invContent.innerHTML = '<div class="panel-placeholder">Inventory is empty.</div>';
+      return;
+    }
+    for (const item of data.items) {
+      invContent.appendChild(buildEntityRow(item, false, item));
+    }
+  };
+
   // ── Character sheet panel ─────────────────────────────────────────────────
   const renderScorePanel = data => {
     charContent.innerHTML = '';
@@ -654,6 +703,49 @@
     pos.className = 'char-position';
     pos.textContent = `${data.position} \u00b7 ${data.stance}`;
     div.appendChild(pos);
+
+    const mkRow = (label, value) => {
+      const row = document.createElement('div');
+      row.className = 'char-row';
+      row.innerHTML = `<span class="char-row-label">${escHtml(label)}</span><span class="char-row-val">${escHtml(String(value))}</span>`;
+      return row;
+    };
+
+    if (data.ac !== undefined || data.hitroll !== undefined || data.damroll !== undefined) {
+      const parts = [];
+      if (data.hitroll !== undefined) parts.push(`HR:${data.hitroll >= 0 ? '+' : ''}${data.hitroll}`);
+      if (data.damroll !== undefined) parts.push(`DR:${data.damroll >= 0 ? '+' : ''}${data.damroll}`);
+      if (data.ac      !== undefined) parts.push(`AC:${data.ac}`);
+      div.appendChild(mkRow('Combat', parts.join('  ')));
+    }
+
+    if (data.saves_spell !== undefined || data.saves_breath !== undefined || data.saves_rod !== undefined) {
+      const parts = [];
+      if (data.saves_spell   !== undefined) parts.push(`Spell:${data.saves_spell}`);
+      if (data.saves_breath  !== undefined) parts.push(`Breath:${data.saves_breath}`);
+      if (data.saves_rod     !== undefined) parts.push(`Rod:${data.saves_rod}`);
+      div.appendChild(mkRow('Saves', parts.join('  ')));
+    }
+
+    if (data.alignment_label !== undefined || data.alignment !== undefined) {
+      const label = data.alignment_label
+        ? `${data.alignment_label}${data.alignment !== undefined ? ` (${data.alignment})` : ''}`
+        : String(data.alignment);
+      div.appendChild(mkRow('Alignment', label));
+    }
+
+    if (data.age !== undefined) div.appendChild(mkRow('Age', `${data.age} years`));
+
+    if (data.kills !== undefined || data.deaths !== undefined || data.pkills !== undefined || data.pdeaths !== undefined) {
+      const parts = [];
+      if (data.kills   !== undefined) parts.push(`Kills:${data.kills}`);
+      if (data.deaths  !== undefined) parts.push(`Deaths:${data.deaths}`);
+      if (data.pkills  !== undefined) parts.push(`PK:${data.pkills}`);
+      if (data.pdeaths !== undefined) parts.push(`PKD:${data.pdeaths}`);
+      div.appendChild(mkRow('KD', parts.join('  ')));
+    }
+
+    if (data.bank_gold !== undefined) div.appendChild(mkRow('Bank', `${data.bank_gold.toLocaleString()} gold`));
 
     charContent.appendChild(div);
   };
@@ -725,6 +817,7 @@
     if (category === 'Map')       { routeMap(msg);  return; }
     if (category === 'Music')     { if (msg.data) handleMusicCommand(msg.data); return; }
     if (msg.tag === 'Equipment')  { renderEquipmentPanel(msg.data); return; }
+    if (msg.tag === 'Inventory' && msg.data && typeof msg.data === 'object') { renderInventoryPanel(msg.data); return; }
     if (msg.tag === 'Score')      { renderScorePanel(msg.data);     return; }
     if (msg.tag === 'Appraise')   {
       renderAppraisePopup(msg.data, appraiseMouseX, appraiseMouseY);
@@ -747,6 +840,8 @@
   const LS_ROOM_SIZE  = 'ack.win.room.size';
   const LS_EQUIP_POS  = 'ack.win.equip.pos';
   const LS_EQUIP_SIZE = 'ack.win.equip.size';
+  const LS_INV_POS    = 'ack.win.inv.pos';
+  const LS_INV_SIZE   = 'ack.win.inv.size';
   const LS_CHAR_POS   = 'ack.win.char.pos';
   const LS_CHAR_SIZE  = 'ack.win.char.size';
 
@@ -754,10 +849,12 @@
     if (!mapWinClosed)   { mapWindow.style.display   = 'flex'; resizeMapCanvas(); }
     if (!roomWinClosed)  { roomWindow.style.display  = 'flex'; }
     if (!equipWinClosed) { equipWindow.style.display = 'flex'; }
+    if (!invWinClosed)   { invWindow.style.display   = 'flex'; }
     if (!charWinClosed)  { charWindow.style.display  = 'flex'; }
     toggleMapBtn.style.display   = '';
     toggleRoomBtn.style.display  = '';
     toggleEquipBtn.style.display = '';
+    toggleInvBtn.style.display   = '';
     toggleCharBtn.style.display  = '';
   };
 
@@ -765,10 +862,12 @@
     mapWindow.style.display      = 'none';
     roomWindow.style.display     = 'none';
     equipWindow.style.display    = 'none';
+    invWindow.style.display      = 'none';
     charWindow.style.display     = 'none';
     toggleMapBtn.style.display   = 'none';
     toggleRoomBtn.style.display  = 'none';
     toggleEquipBtn.style.display = 'none';
+    toggleInvBtn.style.display   = 'none';
     toggleCharBtn.style.display  = 'none';
     hideAppraisePopup();
   };
@@ -794,6 +893,13 @@
     equipWindow.style.top    = ep ? `${ep.y}px` : '80px';
     equipWindow.style.width  = es ? `${es.w}px` : '240px';
     equipWindow.style.height = es ? `${es.h}px` : '380px';
+
+    const ip = JSON.parse(localStorage.getItem(LS_INV_POS)  ?? 'null');
+    const is_ = JSON.parse(localStorage.getItem(LS_INV_SIZE) ?? 'null');
+    invWindow.style.left   = ip  ? `${ip.x}px`  : '575px';
+    invWindow.style.top    = ip  ? `${ip.y}px`  : '80px';
+    invWindow.style.width  = is_ ? `${is_.w}px` : '220px';
+    invWindow.style.height = is_ ? `${is_.h}px` : '320px';
 
     const cp = JSON.parse(localStorage.getItem(LS_CHAR_POS)  ?? 'null');
     const cs = JSON.parse(localStorage.getItem(LS_CHAR_SIZE) ?? 'null');
@@ -839,6 +945,9 @@
   document.getElementById('equip-close-btn').addEventListener('click', () => {
     equipWindow.style.display = 'none'; equipWinClosed = true; hideAppraisePopup();
   });
+  document.getElementById('inv-close-btn').addEventListener('click', () => {
+    invWindow.style.display = 'none'; invWinClosed = true; hideAppraisePopup();
+  });
   document.getElementById('char-close-btn').addEventListener('click', () => {
     charWindow.style.display = 'none'; charWinClosed = true;
   });
@@ -859,6 +968,12 @@
     const hidden = equipWindow.style.display === 'none';
     equipWindow.style.display = hidden ? 'flex' : 'none';
     equipWinClosed = !hidden;
+    if (!hidden) hideAppraisePopup();
+  });
+  toggleInvBtn.addEventListener('click', () => {
+    const hidden = invWindow.style.display === 'none';
+    invWindow.style.display = hidden ? 'flex' : 'none';
+    invWinClosed = !hidden;
     if (!hidden) hideAppraisePopup();
   });
   toggleCharBtn.addEventListener('click', () => {
@@ -943,6 +1058,7 @@
     mapWinClosed   = false;
     roomWinClosed  = false;
     equipWinClosed = true;
+    invWinClosed   = true;
     charWinClosed  = true;
     hideV2Windows();
     ioOutput.textContent = '';
@@ -1027,6 +1143,10 @@
         localStorage.setItem(LS_EQUIP_SIZE, JSON.stringify({w: equipWindow.offsetWidth, h: equipWindow.offsetHeight}));
     }).observe(equipWindow);
     new ResizeObserver(() => {
+      if (invWindow.offsetWidth && invWindow.offsetHeight)
+        localStorage.setItem(LS_INV_SIZE, JSON.stringify({w: invWindow.offsetWidth, h: invWindow.offsetHeight}));
+    }).observe(invWindow);
+    new ResizeObserver(() => {
       if (charWindow.offsetWidth && charWindow.offsetHeight)
         localStorage.setItem(LS_CHAR_SIZE, JSON.stringify({w: charWindow.offsetWidth, h: charWindow.offsetHeight}));
     }).observe(charWindow);
@@ -1038,6 +1158,7 @@
   makeDraggable(mapWindow,   document.getElementById('map-win-header'),   LS_MAP_POS);
   makeDraggable(roomWindow,  document.getElementById('room-win-header'),  LS_ROOM_POS);
   makeDraggable(equipWindow, document.getElementById('equip-win-header'), LS_EQUIP_POS);
+  makeDraggable(invWindow,   document.getElementById('inv-win-header'),   LS_INV_POS);
   makeDraggable(charWindow,  document.getElementById('char-win-header'),  LS_CHAR_POS);
   setRoomPlaceholder('Connect to a TNG world to view the room.');
   setMapPlaceholder('Connect to a TNG world to view the map.');

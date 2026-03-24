@@ -517,6 +517,8 @@ body.mud-fullscreen-active main{
 
 /* ── Equipment panel ── */
 .equip-content{flex:1;overflow-y:auto;padding:.45rem .55rem;font-size:.82rem;}
+/* ── Inventory panel ── */
+.inv-content{flex:1;overflow-y:auto;padding:.45rem .55rem;font-size:.82rem;}
 .equip-table{width:100%;border-collapse:collapse;}
 .equip-slot-name{color:var(--muted);font-size:.7rem;text-transform:uppercase;padding:.15rem .4rem .15rem 0;white-space:nowrap;vertical-align:middle;}
 .equip-item-name{color:var(--text);padding:.15rem 0;}
@@ -538,6 +540,9 @@ body.mud-fullscreen-active main{
 .char-classes{font-size:.74rem;color:var(--accent-bright);margin-bottom:.2rem;font-family:ui-monospace,monospace;}
 .char-gold-exp{font-size:.72rem;color:var(--muted);margin-bottom:.15rem;}
 .char-position{font-size:.72rem;color:var(--muted-dim);font-style:italic;}
+.char-row{display:flex;gap:.45rem;margin:.15rem 0;align-items:baseline;}
+.char-row-label{font-size:.68rem;font-weight:600;color:var(--muted-dim);text-transform:uppercase;letter-spacing:.05em;width:4.5rem;flex-shrink:0;}
+.char-row-val{font-size:.72rem;color:var(--muted);font-family:ui-monospace,monospace;}
 
 /* ── Appraise popup ── */
 .appraise-popup{position:fixed;z-index:2000;background:var(--bg-card);border:1px solid var(--line-bright);border-radius:var(--radius);box-shadow:var(--shadow-lg);padding:.4rem .6rem;font-size:.78rem;line-height:1.5;max-width:220px;pointer-events:none;}
