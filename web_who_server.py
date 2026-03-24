@@ -27,11 +27,12 @@ LORE_DIR = ACKTNG_DIR / "lore"
 TEMPLATE_DIR = WEB_DIR / "templates"
 IMG_DIR = WEB_DIR / "img"
 MP3_DIR = WEB_DIR / "mp3"
-WORLD_TARGETS = [
+_AHA_WORLD_TARGETS = [
     {"id": "acktng", "name": "ACK!TNG", "host": "ackmud.com", "port": 18890, "scheme": "wss"},
     {"id": "ack431", "name": "ACK! 4.3.1", "host": "ackmud.com", "port": 8891, "scheme": "ws"},
     {"id": "ack42", "name": "ACK! 4.2", "host": "ackmud.com", "port": 8892, "scheme": "ws"},
 ]
+_WOL_WORLD_TARGETS: list[dict] = []
 
 _template_cache: dict[str, tuple[int, str]] = {}
 _template_lock = Lock()
@@ -130,7 +131,7 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
 
         if route in ("/mud", "/mud/"):
             self._send_html(
-                _build_mud_client_page(),
+                _build_mud_client_page(_WOL_WORLD_TARGETS),
                 title="AHA: World of Lore — MUD Client",
                 site="wol",
             )
@@ -221,7 +222,7 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
 
         if route in ("/mud", "/mud/"):
             self._send_html(
-                _build_mud_client_page(),
+                _build_mud_client_page(_AHA_WORLD_TARGETS),
                 title="ACKmud Historical Archive — MUD Client",
                 site="aha",
             )
@@ -470,12 +471,12 @@ def _build_stories_page() -> str:
     return _load_template("stories.html").replace("__STORIES__", stories_html)
 
 
-def _build_mud_client_page() -> str:
+def _build_mud_client_page(world_targets: list[dict]) -> str:
     world_options = "".join(
         (
             f"<option value='{world['id']}' data-host='{world['host']}' data-port='{world['port']}' data-scheme='{world['scheme']}'>{world['name']} ({world['host']}:{world['port']})</option>"
         )
-        for world in WORLD_TARGETS
+        for world in world_targets
     )
     return _load_template("mud_client.html").replace("__WORLD_OPTIONS__", world_options)
 
