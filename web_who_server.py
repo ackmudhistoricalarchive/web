@@ -54,11 +54,6 @@ _AHA_TAGLINE = "ACKmud Historical Archive &mdash; Preservation and interpretatio
 _WOL_NAV = (
     "<nav>"
     "<a href='/'>Home</a>"
-    "<a href='/who/'>Who</a>"
-    "<a href='/mud/'>MUD Client</a>"
-    "<a href='/map/'>Map</a>"
-    "<a href='/stories/'>Stories</a>"
-    "<a href='/reference/'>Reference</a>"
     "<a href='https://discord.gg/T24UQV8h' target='_blank' rel='noopener noreferrer'>Discord</a>"
     "<a href='https://aha.ackmud.com/' target='_blank' rel='noopener noreferrer'>Historical Archive</a>"
     "</nav>"
@@ -67,7 +62,12 @@ _WOL_NAV = (
 _AHA_NAV = (
     "<nav>"
     "<a href='/'>Home</a>"
+    "<a href='/acktng/'>ACK!TNG</a>"
+    "<a href='/who/'>Who</a>"
     "<a href='/mud/'>MUD Client</a>"
+    "<a href='/map/'>Map</a>"
+    "<a href='/stories/'>Stories</a>"
+    "<a href='/reference/'>Reference</a>"
     "<a href='https://discord.gg/T24UQV8h' target='_blank' rel='noopener noreferrer'>Discord</a>"
     "<a href='https://github.com/ackmudhistoricalarchive' target='_blank' rel='noopener noreferrer'>Github</a>"
     "<a href='https://ackmud.com/' target='_blank' rel='noopener noreferrer'>World of Lore</a>"
@@ -108,12 +108,32 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             self._handle_aha_route(route, help_query)
 
     def _handle_wol_route(self, route: str, help_query: str = "") -> None:
-        """Routes served on ackmud.com — AHA: World of Lore."""
+        """Routes served on ackmud.com — AHA: World of Lore (coming soon)."""
         if route in ("/",):
             self._send_html(
                 _build_wol_home_page(),
                 title="AHA: World of Lore",
                 site="wol",
+            )
+            return
+
+        self.send_error(404, "Not Found")
+
+    def _handle_aha_route(self, route: str, help_query: str) -> None:
+        """Routes served on aha.ackmud.com — ACKmud Historical Archive."""
+        if route in ("/",):
+            self._send_html(
+                _build_home_page(),
+                title="ACKmud Historical Archive",
+                site="aha",
+            )
+            return
+
+        if route in ("/acktng", "/acktng/"):
+            self._send_html(
+                _build_acktng_page(),
+                title="ACK!TNG — ACKmud Historical Archive",
+                site="aha",
             )
             return
 
@@ -125,27 +145,27 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             self._send_html(
                 self._build_players_page(),
                 title="Who's Online",
-                site="wol",
+                site="aha",
             )
             return
 
         if route in ("/mud", "/mud/"):
             self._send_html(
-                _build_mud_client_page(_WOL_WORLD_TARGETS),
-                title="AHA: World of Lore — MUD Client",
-                site="wol",
+                _build_mud_client_page(_AHA_WORLD_TARGETS),
+                title="ACKmud Historical Archive — MUD Client",
+                site="aha",
             )
             return
 
         if route in ("/map", "/map/", "/world-map", "/world-map/"):
-            self._send_html(_build_world_map_page(), title="World Map", site="wol")
+            self._send_html(_build_world_map_page(), title="World Map", site="aha")
             return
 
         if route in ("/stories", "/stories/"):
             self._send_html(
                 _build_stories_page(),
                 title="Tales from the Age of Monuments",
-                site="wol",
+                site="aha",
             )
             return
 
@@ -165,7 +185,7 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             self._send_html(
                 _build_reference_page("help", help_query),
                 title="Help Topics",
-                site="wol",
+                site="aha",
             )
             return
 
@@ -173,7 +193,7 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             self._send_html(
                 _build_reference_page("help", help_query),
                 title="Help Topics",
-                site="wol",
+                site="aha",
             )
             return
 
@@ -181,7 +201,7 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             self._send_html(
                 _build_reference_page("shelp", help_query),
                 title="Spell Help Topics",
-                site="wol",
+                site="aha",
             )
             return
 
@@ -189,43 +209,23 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             self._send_html(
                 _build_reference_page("lore", help_query),
                 title="Lore Topics",
-                site="wol",
+                site="aha",
             )
             return
 
         if route.startswith("/helps/"):
             topic = route[len("/helps/"):]
-            self._send_topic_page("Help", HELP_DIR, topic, "reference/help", site="wol")
+            self._send_topic_page("Help", HELP_DIR, topic, "reference/help", site="aha")
             return
 
         if route.startswith("/shelps/"):
             topic = route[len("/shelps/"):]
-            self._send_topic_page("Spell Help", SHELP_DIR, topic, "reference/shelp", site="wol")
+            self._send_topic_page("Spell Help", SHELP_DIR, topic, "reference/shelp", site="aha")
             return
 
         if route.startswith("/lores/"):
             topic = route[len("/lores/"):]
-            self._send_lore_topic_page(topic, site="wol")
-            return
-
-        self.send_error(404, "Not Found")
-
-    def _handle_aha_route(self, route: str, help_query: str) -> None:
-        """Routes served on aha.ackmud.com — ACKmud Historical Archive."""
-        if route in ("/",):
-            self._send_html(
-                _build_home_page(),
-                title="ACKmud Historical Archive",
-                site="aha",
-            )
-            return
-
-        if route in ("/mud", "/mud/"):
-            self._send_html(
-                _build_mud_client_page(_AHA_WORLD_TARGETS),
-                title="ACKmud Historical Archive — MUD Client",
-                site="aha",
-            )
+            self._send_lore_topic_page(topic, site="aha")
             return
 
         self.send_error(404, "Not Found")
@@ -454,6 +454,10 @@ def _build_reference_page(active_tab: str, query: str = "") -> str:
 
 def _build_home_page() -> str:
     return _load_template("home.html")
+
+
+def _build_acktng_page() -> str:
+    return _load_template("acktng.html")
 
 
 def _build_wol_home_page() -> str:
