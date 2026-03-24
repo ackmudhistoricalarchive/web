@@ -465,10 +465,14 @@ class ServerIntegrationTest(unittest.TestCase):
         _, body = self._get_aha("/")
         self.assertIn("ackmud.com", body)
 
-    def test_mud_client_contains_world_options(self) -> None:
-        _, body = self._get("/mud")
+    def test_aha_mud_client_contains_world_options(self) -> None:
+        _, body = self._get("/mud", host="aha.ackmud.com")
         self.assertIn("ackmud.com", body)
         self.assertIn("18890", body)  # ACK!TNG WSS port (proxied via nginx)
+
+    def test_wol_mud_client_no_game_servers(self) -> None:
+        _, body = self._get("/mud")
+        self.assertNotIn("18890", body)  # ACK!TNG lives on AHA, not WOL
 
     def test_reference_search_form_present(self) -> None:
         _, body = self._get("/reference/help/")
