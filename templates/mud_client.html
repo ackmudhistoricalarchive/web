@@ -118,8 +118,8 @@
   let fadeTimer      = null;
   let mapWinClosed   = false;
   let roomWinClosed  = false;
-  let equipWinClosed = false;
-  let charWinClosed  = false;
+  let equipWinClosed = true;
+  let charWinClosed  = true;
 
   // Room live-data state
   const roomState = {
@@ -161,6 +161,28 @@
     94:'#79c0ff',95:'#d2a8ff',96:'#a5f3fc',97:'#f0f6fc',
   };
   const escHtml = s => s.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+
+  // Convert ACK @@X color codes to HTML spans. Codes from const_color.c ansi_table.
+  const ACK_COLOR_STYLE = {
+    g:'color:#aaa',      R:'color:#c44',      G:'color:#4c4',
+    b:'color:#a60',      B:'color:#55f',      m:'color:#c4c',
+    c:'color:#4cc',      k:'color:#555',      y:'color:#cc0',
+    W:'color:#fff',      p:'color:#a0c',      d:'color:#666',
+    l:'color:#66f',      r:'color:#4f4',      a:'color:#4ff',
+    e:'color:#f66',      x:'font-weight:bold',
+  };
+  const ackColorToHtml = text => {
+    let html = '', depth = 0;
+    for (const part of text.split(/(@@[\s\S])/)) {
+      if (part.length === 3 && part[0] === '@' && part[1] === '@') {
+        const code = part[2];
+        if (code === 'N') { while (depth > 0) { html += '</span>'; depth--; } }
+        else { const s = ACK_COLOR_STYLE[code]; if (s) { html += `<span style="${s}">`; depth++; } }
+      } else { html += escHtml(part); }
+    }
+    while (depth > 0) { html += '</span>'; depth--; }
+    return html;
+  };
   const ansiToHtml = text => {
     const chunks = text.split(/(\x1b\[[0-9;]*m)/g);
     let st = {fg:'',bg:'',bold:false,ul:false};
@@ -516,7 +538,7 @@
 
   const renderAppraisePopup = (data, mouseX, mouseY) => {
     if (!data) { hideAppraisePopup(); return; }
-    let html = `<div class="appraise-name">${escHtml(data.name)}</div>`;
+    let html = `<div class="appraise-name">${ackColorToHtml(data.short_descr || data.name || '')}</div>`;
     html += `<div class="appraise-type">${escHtml(data.type)}`;
     if (data.item_class) html += ` \u00b7 ${escHtml(data.item_class)}`;
     html += '</div>';
@@ -552,14 +574,13 @@
       const itemTd = document.createElement('td');
       if (slot.item) {
         itemTd.className = 'equip-item-name';
-        itemTd.textContent = slot.item.short_descr;
-        itemTd.dataset.itemName = slot.item.short_descr;
-        let hoverTimer = null;
-        itemTd.addEventListener('mouseenter', () => {
-          hoverTimer = setTimeout(() => sendCmd(`appraise ${slot.item.short_descr}`), 300);
+        itemTd.innerHTML = ackColorToHtml(slot.item.short_descr);
+        itemTd.addEventListener('mouseenter', e => {
+          appraiseMouseX = e.clientX; appraiseMouseY = e.clientY;
+          lastAppraiseData = slot.item;
+          renderAppraisePopup(slot.item, e.clientX, e.clientY);
         });
         itemTd.addEventListener('mouseleave', () => {
-          if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
           hideAppraisePopup();
           lastAppraiseData = null;
         });
@@ -921,8 +942,8 @@
     protocolMode   = 'unknown';
     mapWinClosed   = false;
     roomWinClosed  = false;
-    equipWinClosed = false;
-    charWinClosed  = false;
+    equipWinClosed = true;
+    charWinClosed  = true;
     hideV2Windows();
     ioOutput.textContent = '';
     setRoomPlaceholder('Connecting\u2026');
