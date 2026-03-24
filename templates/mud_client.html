@@ -795,13 +795,17 @@
     if (typeof event.data !== 'string') { appendIO('[Binary message received]\n'); return; }
 
     let msg = null;
-    if (event.data.trimStart().startsWith('{')) {
+    const looksLikeJson = event.data.trimStart().startsWith('{');
+    if (looksLikeJson) {
       try { msg = JSON.parse(event.data); } catch (_) {}
     }
 
     // v1 / legacy path
     if (!msg || msg.v !== 2) {
       if (msg?.type === 'music') { handleMusicCommand(msg); return; }
+      // If parse failed on something that looks like JSON, it's likely a server-side
+      // buffer truncation — don't treat it as a v1 server or hide panels.
+      if (msg === null && looksLikeJson) return;
       if (protocolMode !== 'v1') {
         protocolMode = 'v1';
         hideV2Windows();
