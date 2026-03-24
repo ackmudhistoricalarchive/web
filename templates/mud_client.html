@@ -976,6 +976,7 @@
     invWindow.style.display = hidden ? 'flex' : 'none';
     invWinClosed = !hidden;
     if (!hidden) hideAppraisePopup();
+    if (hidden) sendCmd('inventory');
   });
   toggleCharBtn.addEventListener('click', () => {
     const hidden = charWindow.style.display === 'none';
