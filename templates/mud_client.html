@@ -118,8 +118,8 @@
   let fadeTimer      = null;
   let mapWinClosed   = false;
   let roomWinClosed  = false;
-  let equipWinClosed = false;
-  let charWinClosed  = false;
+  let equipWinClosed = true;
+  let charWinClosed  = true;
 
   // Room live-data state
   const roomState = {
@@ -516,7 +516,7 @@
 
   const renderAppraisePopup = (data, mouseX, mouseY) => {
     if (!data) { hideAppraisePopup(); return; }
-    let html = `<div class="appraise-name">${escHtml(data.name)}</div>`;
+    let html = `<div class="appraise-name">${escHtml(data.short_descr || data.name || '')}</div>`;
     html += `<div class="appraise-type">${escHtml(data.type)}`;
     if (data.item_class) html += ` \u00b7 ${escHtml(data.item_class)}`;
     html += '</div>';
@@ -553,13 +553,12 @@
       if (slot.item) {
         itemTd.className = 'equip-item-name';
         itemTd.textContent = slot.item.short_descr;
-        itemTd.dataset.itemName = slot.item.short_descr;
-        let hoverTimer = null;
-        itemTd.addEventListener('mouseenter', () => {
-          hoverTimer = setTimeout(() => sendCmd(`appraise ${slot.item.short_descr}`), 300);
+        itemTd.addEventListener('mouseenter', e => {
+          appraiseMouseX = e.clientX; appraiseMouseY = e.clientY;
+          lastAppraiseData = slot.item;
+          renderAppraisePopup(slot.item, e.clientX, e.clientY);
         });
         itemTd.addEventListener('mouseleave', () => {
-          if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
           hideAppraisePopup();
           lastAppraiseData = null;
         });
@@ -921,8 +920,8 @@
     protocolMode   = 'unknown';
     mapWinClosed   = false;
     roomWinClosed  = false;
-    equipWinClosed = false;
-    charWinClosed  = false;
+    equipWinClosed = true;
+    charWinClosed  = true;
     hideV2Windows();
     ioOutput.textContent = '';
     setRoomPlaceholder('Connecting\u2026');
