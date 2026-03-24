@@ -644,7 +644,8 @@
       return;
     }
     for (const item of data.items) {
-      invContent.appendChild(buildEntityRow(item, false, item));
+      const entity = { ...item, name: item.short_descr ?? item.keyword };
+      invContent.appendChild(buildEntityRow(entity, false, item));
     }
   };
 
