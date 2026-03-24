@@ -63,11 +63,11 @@ _AHA_NAV = (
     "<nav>"
     "<a href='/'>Home</a>"
     "<a href='/acktng/'>ACK!TNG</a>"
-    "<a href='/who/'>Who</a>"
-    "<a href='/mud/'>MUD Client</a>"
-    "<a href='/map/'>Map</a>"
-    "<a href='/stories/'>Stories</a>"
-    "<a href='/reference/'>Reference</a>"
+    "<a href='/acktng/who/'>Who</a>"
+    "<a href='/acktng/mud/'>MUD Client</a>"
+    "<a href='/acktng/map/'>Map</a>"
+    "<a href='/acktng/stories/'>Stories</a>"
+    "<a href='/acktng/reference/'>Reference</a>"
     "<a href='https://discord.gg/T24UQV8h' target='_blank' rel='noopener noreferrer'>Discord</a>"
     "<a href='https://github.com/ackmudhistoricalarchive' target='_blank' rel='noopener noreferrer'>Github</a>"
     "<a href='https://ackmud.com/' target='_blank' rel='noopener noreferrer'>World of Lore</a>"
@@ -121,6 +121,8 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_aha_route(self, route: str, help_query: str) -> None:
         """Routes served on aha.ackmud.com — ACKmud Historical Archive."""
+        _PFX = "/acktng"
+
         if route in ("/",):
             self._send_html(
                 _build_home_page(),
@@ -137,11 +139,11 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             )
             return
 
-        if route in ("/gsgp", "/gsgp/"):
+        if route in ("/acktng/gsgp", "/acktng/gsgp/"):
             self._send_gsgp()
             return
 
-        if route in ("/players", "/players/", "/who", "/who/"):
+        if route in ("/acktng/players", "/acktng/players/", "/acktng/who", "/acktng/who/"):
             self._send_html(
                 self._build_players_page(),
                 title="Who's Online",
@@ -149,19 +151,19 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             )
             return
 
-        if route in ("/mud", "/mud/"):
+        if route in ("/acktng/mud", "/acktng/mud/"):
             self._send_html(
                 _build_mud_client_page(_AHA_WORLD_TARGETS),
-                title="ACKmud Historical Archive — MUD Client",
+                title="ACK!TNG — MUD Client",
                 site="aha",
             )
             return
 
-        if route in ("/map", "/map/", "/world-map", "/world-map/"):
+        if route in ("/acktng/map", "/acktng/map/", "/acktng/world-map", "/acktng/world-map/"):
             self._send_html(_build_world_map_page(), title="World Map", site="aha")
             return
 
-        if route in ("/stories", "/stories/"):
+        if route in ("/acktng/stories", "/acktng/stories/"):
             self._send_html(
                 _build_stories_page(),
                 title="Tales from the Age of Monuments",
@@ -169,63 +171,63 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
             )
             return
 
-        if route in ("/help", "/help/", "/helps", "/helps/"):
-            self._redirect_to("/reference/help/")
+        if route in ("/acktng/help", "/acktng/help/", "/acktng/helps", "/acktng/helps/"):
+            self._redirect_to("/acktng/reference/help/")
             return
 
-        if route in ("/shelp", "/shelp/", "/shelps", "/shelps/"):
-            self._redirect_to("/reference/shelp/")
+        if route in ("/acktng/shelp", "/acktng/shelp/", "/acktng/shelps", "/acktng/shelps/"):
+            self._redirect_to("/acktng/reference/shelp/")
             return
 
-        if route in ("/lore", "/lore/", "/lores", "/lores/"):
-            self._redirect_to("/reference/lore/")
+        if route in ("/acktng/lore", "/acktng/lore/", "/acktng/lores", "/acktng/lores/"):
+            self._redirect_to("/acktng/reference/lore/")
             return
 
-        if route in ("/reference", "/reference/"):
+        if route in ("/acktng/reference", "/acktng/reference/"):
             self._send_html(
-                _build_reference_page("help", help_query),
+                _build_reference_page("help", help_query, prefix=_PFX),
                 title="Help Topics",
                 site="aha",
             )
             return
 
-        if route in ("/reference/help", "/reference/help/"):
+        if route in ("/acktng/reference/help", "/acktng/reference/help/"):
             self._send_html(
-                _build_reference_page("help", help_query),
+                _build_reference_page("help", help_query, prefix=_PFX),
                 title="Help Topics",
                 site="aha",
             )
             return
 
-        if route in ("/reference/shelp", "/reference/shelp/"):
+        if route in ("/acktng/reference/shelp", "/acktng/reference/shelp/"):
             self._send_html(
-                _build_reference_page("shelp", help_query),
+                _build_reference_page("shelp", help_query, prefix=_PFX),
                 title="Spell Help Topics",
                 site="aha",
             )
             return
 
-        if route in ("/reference/lore", "/reference/lore/"):
+        if route in ("/acktng/reference/lore", "/acktng/reference/lore/"):
             self._send_html(
-                _build_reference_page("lore", help_query),
+                _build_reference_page("lore", help_query, prefix=_PFX),
                 title="Lore Topics",
                 site="aha",
             )
             return
 
-        if route.startswith("/helps/"):
-            topic = route[len("/helps/"):]
-            self._send_topic_page("Help", HELP_DIR, topic, "reference/help", site="aha")
+        if route.startswith("/acktng/helps/"):
+            topic = route[len("/acktng/helps/"):]
+            self._send_topic_page("Help", HELP_DIR, topic, "reference/help", site="aha", prefix=_PFX)
             return
 
-        if route.startswith("/shelps/"):
-            topic = route[len("/shelps/"):]
-            self._send_topic_page("Spell Help", SHELP_DIR, topic, "reference/shelp", site="aha")
+        if route.startswith("/acktng/shelps/"):
+            topic = route[len("/acktng/shelps/"):]
+            self._send_topic_page("Spell Help", SHELP_DIR, topic, "reference/shelp", site="aha", prefix=_PFX)
             return
 
-        if route.startswith("/lores/"):
-            topic = route[len("/lores/"):]
-            self._send_lore_topic_page(topic, site="aha")
+        if route.startswith("/acktng/lores/"):
+            topic = route[len("/acktng/lores/"):]
+            self._send_lore_topic_page(topic, site="aha", prefix=_PFX)
             return
 
         self.send_error(404, "Not Found")
@@ -238,7 +240,7 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Location", location)
         self.end_headers()
 
-    def _send_lore_topic_page(self, topic: str, site: str = "wol") -> None:
+    def _send_lore_topic_page(self, topic: str, site: str = "aha", prefix: str = "") -> None:
         topic_path = _safe_topic_path(LORE_DIR, topic)
         if topic_path is None:
             self.send_error(404, "Not Found")
@@ -247,13 +249,13 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
         first_entry = _extract_first_lore_entry(_read_cached_topic(topic_path))
         body = (
             f"<h1>Lore: {escape(topic_path.name)}</h1>"
-            f"<p><a href='/reference/lore/'>Back to Lore index</a></p>"
+            f"<p><a href='{prefix}/reference/lore/'>Back to Lore index</a></p>"
             f"<pre>{escape(first_entry)}</pre>"
         )
         self._send_html(body, title=f"Lore: {topic_path.name}", site=site)
 
     def _send_topic_page(
-        self, page_name: str, base_dir: Path, topic: str, base_route: str, site: str = "aha"
+        self, page_name: str, base_dir: Path, topic: str, base_route: str, site: str = "aha", prefix: str = ""
     ) -> None:
         topic_path = _safe_topic_path(base_dir, topic)
         if topic_path is None:
@@ -262,7 +264,7 @@ class WhoRequestHandler(BaseHTTPRequestHandler):
 
         body = (
             f"<h1>{escape(page_name)}: {escape(topic_path.name)}</h1>"
-            f"<p><a href='/{escape(base_route)}/'>Back to {escape(page_name)} index</a></p>"
+            f"<p><a href='{prefix}/{escape(base_route)}/'>Back to {escape(page_name)} index</a></p>"
             f"<pre>{escape(_read_cached_topic(topic_path))}</pre>"
         )
         self._send_html(body, title=f"{page_name}: {topic_path.name}", site=site)
@@ -398,10 +400,11 @@ _SEARCH_FORM_META: dict[str, tuple[str, str, str, str]] = {
 }
 
 
-def _build_topic_index_page(title: str, route_base: str, base_dir: Path, query: str = "") -> str:
+def _build_topic_index_page(title: str, route_base: str, base_dir: Path, query: str = "", prefix: str = "") -> str:
     label_text, input_id, placeholder, action = _SEARCH_FORM_META.get(
         route_base, (title + ":", route_base + "-q", "topic", f"/{route_base}/")
     )
+    action = prefix + action
     search_form = (
         f"<section class='help-forms'>"
         f"<form method='get' action='{action}'>"
@@ -418,7 +421,7 @@ def _build_topic_index_page(title: str, route_base: str, base_dir: Path, query: 
     normalized_query = query.strip().lower()
     topic_names = _get_topic_names(base_dir)
     links = [
-        f"<li><a href='/{escape(route_base)}/{escape(name)}'>{escape(name)}</a></li>"
+        f"<li><a href='{prefix}/{escape(route_base)}/{escape(name)}'>{escape(name)}</a></li>"
         for name in topic_names
         if not normalized_query or normalized_query in name.lower()
     ]
@@ -435,17 +438,17 @@ def _build_topic_index_page(title: str, route_base: str, base_dir: Path, query: 
     return f"{search_form}<h1>{escape(title)}</h1>{query_blurb}<ul>{''.join(links)}</ul>"
 
 
-def _build_reference_page(active_tab: str, query: str = "") -> str:
+def _build_reference_page(active_tab: str, query: str = "", prefix: str = "") -> str:
     """Build the unified Reference page with Help / Spell Help / Lore sub-nav."""
     tab_parts = []
     for slug, label, _route, _dir, _ph in _REFERENCE_TABS:
         css_class = "active" if slug == active_tab else ""
-        tab_parts.append(f"<a href='/reference/{slug}/' class='{css_class}'>{label}</a>")
+        tab_parts.append(f"<a href='{prefix}/reference/{slug}/' class='{css_class}'>{label}</a>")
     sub_nav = f"<nav class='sub-nav'>{''.join(tab_parts)}</nav>"
 
     for slug, label, route_base, base_dir, placeholder in _REFERENCE_TABS:
         if slug == active_tab:
-            index_html = _build_topic_index_page(f"{label} Topics", route_base, base_dir, query)
+            index_html = _build_topic_index_page(f"{label} Topics", route_base, base_dir, query, prefix=prefix)
             return f"{sub_nav}{index_html}"
 
     # Fallback (should not happen)

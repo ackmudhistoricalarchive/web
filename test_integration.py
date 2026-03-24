@@ -213,28 +213,36 @@ class ServerIntegrationTest(unittest.TestCase):
     def test_aha_acktng_200(self) -> None:
         self._assert_ok_contains("/acktng/", "ACK!TNG", host="aha.ackmud.com")
 
-    def test_aha_map_200(self) -> None:
-        self._assert_ok_contains("/map", "World Map", host="aha.ackmud.com")
+    def test_aha_acktng_map_200(self) -> None:
+        self._assert_ok_contains("/acktng/map", "World Map", host="aha.ackmud.com")
 
-    def test_aha_stories_200(self) -> None:
-        self._assert_ok_contains("/stories", "Tales from the Age of Monuments", host="aha.ackmud.com")
+    def test_aha_acktng_stories_200(self) -> None:
+        self._assert_ok_contains("/acktng/stories", "Tales from the Age of Monuments", host="aha.ackmud.com")
 
-    def test_aha_reference_200(self) -> None:
-        status, body = self._get_aha("/reference/")
+    def test_aha_acktng_reference_200(self) -> None:
+        status, body = self._get("/acktng/reference/", host="aha.ackmud.com")
         self.assertEqual(status, 200)
         self.assertIn("Help", body)
 
-    def test_aha_reference_help_200(self) -> None:
-        status, _ = self._get_aha("/reference/help/")
+    def test_aha_acktng_reference_help_200(self) -> None:
+        status, _ = self._get("/acktng/reference/help/", host="aha.ackmud.com")
         self.assertEqual(status, 200)
 
-    def test_aha_reference_shelp_200(self) -> None:
-        status, _ = self._get_aha("/reference/shelp/")
+    def test_aha_acktng_reference_shelp_200(self) -> None:
+        status, _ = self._get("/acktng/reference/shelp/", host="aha.ackmud.com")
         self.assertEqual(status, 200)
 
-    def test_aha_reference_lore_200(self) -> None:
-        status, _ = self._get_aha("/reference/lore/")
+    def test_aha_acktng_reference_lore_200(self) -> None:
+        status, _ = self._get("/acktng/reference/lore/", host="aha.ackmud.com")
         self.assertEqual(status, 200)
+
+    def test_aha_top_level_map_404(self) -> None:
+        status, _ = self._get_aha("/map")
+        self.assertEqual(status, 404)
+
+    def test_aha_top_level_reference_404(self) -> None:
+        status, _ = self._get_aha("/reference/")
+        self.assertEqual(status, 404)
 
     def test_aha_has_github_link(self) -> None:
         _, body = self._get_aha("/")
@@ -244,34 +252,43 @@ class ServerIntegrationTest(unittest.TestCase):
         _, body = self._get_aha("/")
         self.assertIn("ackmud.com", body)
 
-    def test_aha_who_200(self) -> None:
-        status, _ = self._get_aha("/who")
+    def test_aha_acktng_who_200(self) -> None:
+        status, _ = self._get("/acktng/who", host="aha.ackmud.com")
         self.assertEqual(status, 200)
 
-    def test_aha_mud_200(self) -> None:
-        self._assert_ok_contains("/mud", "ACKmud Historical Archive", host="aha.ackmud.com")
+    def test_aha_top_level_who_404(self) -> None:
+        status, _ = self._get_aha("/who")
+        self.assertEqual(status, 404)
+
+    def test_aha_acktng_mud_200(self) -> None:
+        status, _ = self._get("/acktng/mud", host="aha.ackmud.com")
+        self.assertEqual(status, 200)
+
+    def test_aha_top_level_mud_404(self) -> None:
+        status, _ = self._get_aha("/mud")
+        self.assertEqual(status, 404)
 
     # ------------------------------------------------------------------
     # Legacy URL redirects (AHA site)
     # ------------------------------------------------------------------
 
     def test_help_redirects_to_reference(self) -> None:
-        self._assert_redirect("/help/", "/reference/help/", host="aha.ackmud.com")
+        self._assert_redirect("/acktng/help/", "/acktng/reference/help/", host="aha.ackmud.com")
 
     def test_shelp_redirects_to_reference(self) -> None:
-        self._assert_redirect("/shelp/", "/reference/shelp/", host="aha.ackmud.com")
+        self._assert_redirect("/acktng/shelp/", "/acktng/reference/shelp/", host="aha.ackmud.com")
 
     def test_lore_redirects_to_reference(self) -> None:
-        self._assert_redirect("/lore/", "/reference/lore/", host="aha.ackmud.com")
+        self._assert_redirect("/acktng/lore/", "/acktng/reference/lore/", host="aha.ackmud.com")
 
     def test_helps_redirects_to_reference(self) -> None:
-        self._assert_redirect("/helps/", "/reference/help/", host="aha.ackmud.com")
+        self._assert_redirect("/acktng/helps/", "/acktng/reference/help/", host="aha.ackmud.com")
 
     def test_shelps_redirects_to_reference(self) -> None:
-        self._assert_redirect("/shelps/", "/reference/shelp/", host="aha.ackmud.com")
+        self._assert_redirect("/acktng/shelps/", "/acktng/reference/shelp/", host="aha.ackmud.com")
 
     def test_lores_redirects_to_reference(self) -> None:
-        self._assert_redirect("/lores/", "/reference/lore/", host="aha.ackmud.com")
+        self._assert_redirect("/acktng/lores/", "/acktng/reference/lore/", host="aha.ackmud.com")
 
     # ------------------------------------------------------------------
     # Static image serving (both sites)
@@ -351,21 +368,21 @@ class ServerIntegrationTest(unittest.TestCase):
             return exc.code, {}
 
     def test_gsgp_returns_200(self) -> None:
-        status, _ = self._get("/gsgp", host="aha.ackmud.com")
+        status, _ = self._get("/acktng/gsgp", host="aha.ackmud.com")
         self.assertEqual(status, 200)
 
     def test_gsgp_slash_returns_200(self) -> None:
-        status, _ = self._get("/gsgp/", host="aha.ackmud.com")
+        status, _ = self._get("/acktng/gsgp/", host="aha.ackmud.com")
         self.assertEqual(status, 200)
 
     def test_gsgp_content_type_json(self) -> None:
-        url = f"http://127.0.0.1:{self.port}/gsgp"
+        url = f"http://127.0.0.1:{self.port}/acktng/gsgp"
         req = urllib.request.Request(url, headers={"Host": "aha.ackmud.com"})
         resp = _no_redirect_opener.open(req)
         self.assertIn("application/json", resp.headers.get("Content-Type", ""))
 
     def test_gsgp_cors_header(self) -> None:
-        url = f"http://127.0.0.1:{self.port}/gsgp"
+        url = f"http://127.0.0.1:{self.port}/acktng/gsgp"
         req = urllib.request.Request(url, headers={"Host": "aha.ackmud.com"})
         resp = _no_redirect_opener.open(req)
         self.assertEqual(resp.headers.get("Access-Control-Allow-Origin"), "*")
@@ -376,7 +393,7 @@ class ServerIntegrationTest(unittest.TestCase):
         original = web_who_server.ACKTNG_GAME_URL
         web_who_server.ACKTNG_GAME_URL = "http://127.0.0.1:1"
         try:
-            status, data = self._get_json("/gsgp", host="aha.ackmud.com")
+            status, data = self._get_json("/acktng/gsgp", host="aha.ackmud.com")
             self.assertEqual(status, 200)
             self.assertIn("name", data)
             self.assertIn("active_players", data)
@@ -388,7 +405,7 @@ class ServerIntegrationTest(unittest.TestCase):
             web_who_server.ACKTNG_GAME_URL = original
 
     def test_gsgp_serves_mud_data(self) -> None:
-        """When the MUD is reachable, /gsgp proxies the MUD's /gsgp response."""
+        """When the MUD is reachable, /acktng/gsgp proxies the MUD's /gsgp response."""
         global _mock_gsgp_data
         original_data = _mock_gsgp_data.copy()
         _mock_gsgp_data = {
@@ -400,7 +417,7 @@ class ServerIntegrationTest(unittest.TestCase):
         }
         try:
             with _MockMUDServer():
-                status, data = self._get_json("/gsgp", host="aha.ackmud.com")
+                status, data = self._get_json("/acktng/gsgp", host="aha.ackmud.com")
                 self.assertEqual(status, 200)
                 self.assertEqual(data["active_players"], 3)
                 self.assertEqual(len(data["leaderboards"]), 1)
@@ -409,7 +426,7 @@ class ServerIntegrationTest(unittest.TestCase):
 
     def test_gsgp_not_on_wol_site(self) -> None:
         """The /gsgp endpoint is not exposed on the WOL site."""
-        status, _ = self._get("/gsgp", host="ackmud.com")
+        status, _ = self._get("/acktng/gsgp", host="ackmud.com")
         self.assertEqual(status, 404)
 
     # ------------------------------------------------------------------
@@ -417,24 +434,24 @@ class ServerIntegrationTest(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_who_fallback_shows_zero_players(self) -> None:
-        """When the MUD is unreachable, /who shows 0 players online."""
+        """When the MUD is unreachable, /acktng/who shows 0 players online."""
         original = web_who_server.ACKTNG_GAME_URL
         web_who_server.ACKTNG_GAME_URL = "http://127.0.0.1:1"
         try:
-            status, body = self._get("/who", host="aha.ackmud.com")
+            status, body = self._get("/acktng/who", host="aha.ackmud.com")
             self.assertEqual(status, 200)
             self.assertIn("Players online: 0", body)
         finally:
             web_who_server.ACKTNG_GAME_URL = original
 
     def test_who_serves_mud_who(self) -> None:
-        """When the MUD is reachable, /who proxies the MUD's /who response."""
+        """When the MUD is reachable, /acktng/who proxies the MUD's /who response."""
         global _mock_wholist_html
         original_html = _mock_wholist_html
         _mock_wholist_html = "<ul><li>Hero</li><li>Villain</li></ul>"
         try:
             with _MockMUDServer():
-                status, body = self._get("/who", host="aha.ackmud.com")
+                status, body = self._get("/acktng/who", host="aha.ackmud.com")
                 self.assertEqual(status, 200)
                 self.assertIn("Hero", body)
                 self.assertIn("Villain", body)
@@ -467,7 +484,7 @@ class ServerIntegrationTest(unittest.TestCase):
         self.assertIn("ackmud.com", body)
 
     def test_aha_mud_client_contains_world_options(self) -> None:
-        _, body = self._get("/mud", host="aha.ackmud.com")
+        _, body = self._get("/acktng/mud", host="aha.ackmud.com")
         self.assertIn("ackmud.com", body)
         self.assertIn("18890", body)  # ACK!TNG WSS port (proxied via nginx)
 
@@ -477,13 +494,13 @@ class ServerIntegrationTest(unittest.TestCase):
         self.assertEqual(status, 404)
 
     def test_reference_search_form_present(self) -> None:
-        _, body = self._get("/reference/help/", host="aha.ackmud.com")
+        _, body = self._get("/acktng/reference/help/", host="aha.ackmud.com")
         self.assertIn("<form", body)
         self.assertIn("name='q'", body)
 
     def test_reference_search_query_filters(self) -> None:
         """Searching for a nonexistent term should say no matches."""
-        _, body = self._get("/reference/help/?q=zzzznonexistenttopiczzz", host="aha.ackmud.com")
+        _, body = self._get("/acktng/reference/help/?q=zzzznonexistenttopiczzz", host="aha.ackmud.com")
         # Either "No topics match" or "No topics available" — both are fine
         self.assertTrue(
             "No topics" in body,
