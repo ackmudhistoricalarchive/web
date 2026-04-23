@@ -62,10 +62,7 @@ test('api endpoints match merged-site behavior', async () => {
   fs.writeFileSync(path.join(staticDir, 'index.html'), '<html><body>spa</body></html>');
   fs.writeFileSync(path.join(helpDir, 'fire'), 'Fire burns things.');
   fs.writeFileSync(path.join(loreDir, 'dragon'), 'keywords dragon\n---\nDragons breathe fire.\n---\nflags city\n---\nCity lore.');
-  fs.writeFileSync(path.join(publicDir, 'wol', 'home.content.html'), '<h1>World of Lore</h1>');
   fs.writeFileSync(path.join(publicDir, 'wol', 'stories.content.html'), '<h1>Stories</h1><section class="story-card"></section>');
-  fs.writeFileSync(path.join(publicDir, 'wol', 'site.css'), 'body{}');
-  fs.writeFileSync(path.join(publicDir, 'wol', 'stories.js'), 'console.log("stories");');
 
   const server = createAppServer({ helpDir, shelpDir, loreDir, staticDir, publicDir, fetchFn: fakeFetch });
   server.listen(0, '127.0.0.1');
@@ -97,13 +94,13 @@ test('api endpoints match merged-site behavior', async () => {
   assert.equal(spaResponse.status, 200);
   assert.match(await spaResponse.text(), /spa/);
 
-  const wolHome = await requestText(baseUrl, '/');
-  assert.equal(wolHome.status, 200);
-  assert.match(wolHome.body, /ACKmud\.com/);
+  const home = await requestText(baseUrl, '/');
+  assert.equal(home.status, 200);
+  assert.match(home.body, /spa/);
 
-  const wolStories = await requestText(baseUrl, '/stories');
-  assert.equal(wolStories.status, 200);
-  assert.match(wolStories.body, /story-card/);
+  const stories = await requestText(baseUrl, '/stories');
+  assert.equal(stories.status, 200);
+  assert.match(stories.body, /spa/);
 
   const archiveHome = await fetch(`${baseUrl}/archive`);
   assert.equal(archiveHome.status, 200);

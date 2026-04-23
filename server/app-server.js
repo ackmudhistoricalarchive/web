@@ -82,47 +82,6 @@ function serveStatic(res, staticDir, pathname) {
   return false;
 }
 
-function readPublicFile(publicDir, relPath) {
-  return fs.readFileSync(path.join(publicDir, relPath), 'utf8');
-}
-
-function renderWolPage(config, pageTitle, body, activePath) {
-  const navClass = (href) => href === activePath ? 'active' : '';
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${pageTitle}</title>
-    <link rel="stylesheet" href="/wol/site.css" />
-  </head>
-  <body>
-    <div class="site-shell">
-      <header class="site-brand">
-        <h2>World of Lore</h2>
-        <p>ACKmud.com: World of Lore, the archive, and the live game sections in one place.</p>
-      </header>
-      <nav class="site-nav">
-        <a class="${navClass('/')}" href="/">Home</a>
-        <a class="${navClass('/stories')}" href="/stories">Stories</a>
-        <a class="${navClass('/archive')}" href="/archive">Archive</a>
-        <a class="${navClass('/acktng')}" href="/acktng">ACK!TNG</a>
-        <a class="${navClass('/acktng/who')}" href="/acktng/who">Who</a>
-        <a class="${navClass('/acktng/mud')}" href="/acktng/mud">MUD Client</a>
-        <a class="${navClass('/acktng/map')}" href="/acktng/map">Map</a>
-        <a class="${navClass('/acktng/reference/help')}" href="/acktng/reference/help">Reference</a>
-        <a href="https://discord.gg/T24UQV8h" target="_blank" rel="noopener noreferrer">Discord</a>
-        <a href="https://github.com/ackmudhistoricalarchive" target="_blank" rel="noopener noreferrer">GitHub</a>
-      </nav>
-      <main>
-${body}
-      </main>
-    </div>
-    <script src="/wol/stories.js"></script>
-  </body>
-</html>`;
-}
-
 export function createAppServer(options = {}) {
   const config = {
     ...envConfig(),
@@ -141,18 +100,6 @@ export function createAppServer(options = {}) {
 
     if (pathname === '/health') {
       send(res, 200, 'ok\n', 'text/plain; charset=utf-8');
-      return;
-    }
-
-    if (pathname === '/') {
-      const body = readPublicFile(config.publicDir, 'wol/home.content.html');
-      send(res, 200, renderWolPage(config, 'ACKmud.com - World of Lore', body, '/'), 'text/html; charset=utf-8');
-      return;
-    }
-
-    if (pathname === '/stories') {
-      const body = readPublicFile(config.publicDir, 'wol/stories.content.html');
-      send(res, 200, renderWolPage(config, 'Tales from the Age of Monuments - ACKmud.com', body, '/stories'), 'text/html; charset=utf-8');
       return;
     }
 
