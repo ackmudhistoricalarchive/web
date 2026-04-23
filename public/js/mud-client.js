@@ -1,95 +1,4 @@
-<div id='mud-client-container'>
-<div class='mud-controls' style='margin-bottom:.4rem;'>
-  <label for='world-select'>World</label>
-  <select id='world-select'>__WORLD_OPTIONS__</select>
-  <button id='connect-btn' type='button'>Connect</button>
-  <button id='disconnect-btn' type='button'>Disconnect</button>
-  <span id='mud-status' class='mud-status'></span>
-  <button id='toggle-map-btn' type='button' style='display:none'>Map</button>
-  <button id='toggle-room-btn' type='button' style='display:none'>Room</button>
-  <button id='toggle-equip-btn' type='button' style='display:none'>Equip</button>
-  <button id='toggle-inv-btn' type='button' style='display:none'>Inv</button>
-  <button id='toggle-char-btn' type='button' style='display:none'>Char</button>
-  <button id='fullscreen-btn' type='button' style='margin-left:auto'>&#x26F6; Fullscreen</button>
-</div>
-
-<!-- Main I/O panel (always visible) -->
-<div id='io-panel'>
-  <pre id='mud-output' class='mud-output'></pre>
-  <div class='mud-input-bar'>
-    <input id='mud-command' placeholder='Type a command and press Enter' autocomplete='off' spellcheck='false'>
-    <button id='send-btn' type='button'>Send</button>
-  </div>
-</div>
-
-<!-- Floating Map window (v2 servers only) -->
-<div class='float-window' id='map-window'>
-  <div class='float-header' id='map-win-header'>
-    <span class='float-title'>Map</span>
-    <button class='float-close' id='map-close-btn' type='button'>&#10005;</button>
-  </div>
-  <canvas id='map-canvas'></canvas>
-  <div id='map-placeholder'>Connect to a TNG world to view the map.</div>
-</div>
-
-<!-- Floating Room window (v2 servers only) -->
-<div class='float-window' id='room-window'>
-  <div class='float-header' id='room-win-header'>
-    <span class='float-title'>Room</span>
-    <button class='float-close' id='room-close-btn' type='button'>&#10005;</button>
-  </div>
-  <div id='room-content' class='room-content'></div>
-</div>
-
-<!-- Floating Equipment window (v2 servers only) -->
-<div class='float-window' id='equip-window'>
-  <div class='float-header' id='equip-win-header'>
-    <span class='float-title'>Equipment</span>
-    <button class='float-close' id='equip-close-btn' type='button'>&#10005;</button>
-  </div>
-  <div id='equip-content' class='equip-content'></div>
-</div>
-
-<!-- Floating Inventory window (v2 servers only) -->
-<div class='float-window' id='inv-window'>
-  <div class='float-header' id='inv-win-header'>
-    <span class='float-title'>Inventory</span>
-    <button class='float-close' id='inv-close-btn' type='button'>&#10005;</button>
-  </div>
-  <div id='inv-content' class='inv-content'></div>
-</div>
-
-<!-- Floating Character sheet window (v2 servers only) -->
-<div class='float-window' id='char-window'>
-  <div class='float-header' id='char-win-header'>
-    <span class='float-title'>Character</span>
-    <button class='float-close' id='char-close-btn' type='button'>&#10005;</button>
-  </div>
-  <div id='char-content' class='char-content'></div>
-</div>
-
-<!-- Appraise tooltip (shown on equip item mouseover) -->
-<div id='appraise-popup' class='appraise-popup' style='display:none'></div>
-
-<div id='music-controls' class='mud-controls' style='display:none;align-items:center;gap:8px;flex-wrap:wrap;'>
-  <span style='opacity:0.7;font-size:0.85em;'>&#9835; Music:</span>
-  <button id='music-play-btn' type='button'>&#9654; Play</button>
-  <button id='music-stop-btn' type='button'>&#9646;&#9646; Stop</button>
-  <label style='display:flex;align-items:center;gap:4px;font-size:0.85em;'>
-    Vol
-    <input id='music-volume' type='range' min='0' max='1' step='0.05' value='0.5' style='width:80px;'>
-  </label>
-  <label style='display:flex;align-items:center;gap:4px;font-size:0.85em;cursor:pointer;'>
-    <input id='music-loop' type='checkbox' checked>
-    Loop
-  </label>
-</div>
-<audio id='mud-audio'></audio>
-<audio id='mud-audio-next'></audio>
-</div>
-
-<script>
-(() => {
+window.mudClientInit = () => {
   // ── DOM refs ──────────────────────────────────────────────────────────────
   const worldSelect    = document.getElementById('world-select');
   const connectBtn     = document.getElementById('connect-btn');
@@ -795,17 +704,13 @@
     if (typeof event.data !== 'string') { appendIO('[Binary message received]\n'); return; }
 
     let msg = null;
-    const looksLikeJson = event.data.trimStart().startsWith('{');
-    if (looksLikeJson) {
+    if (event.data.trimStart().startsWith('{')) {
       try { msg = JSON.parse(event.data); } catch (_) {}
     }
 
     // v1 / legacy path
     if (!msg || msg.v !== 2) {
       if (msg?.type === 'music') { handleMusicCommand(msg); return; }
-      // If parse failed on something that looks like JSON, it's likely a server-side
-      // buffer truncation — don't treat it as a v1 server or hide panels.
-      if (msg === null && looksLikeJson) return;
       if (protocolMode !== 'v1') {
         protocolMode = 'v1';
         hideV2Windows();
@@ -1095,7 +1000,7 @@
     socket.addEventListener('error', () => {
       if (isSecure) {
         appendIO(
-          '\n[Error] WSS connection failed (code ' + e.code + ').\n' +
+          '\n[Error] WSS connection failed.\n' +
           '[Info] Check that the nginx proxy is running and the SSL certificate is valid.\n',
           'io-system'
         );
@@ -1172,5 +1077,4 @@
   const showWorld = () => appendIO(`\n[World] ${selectedWorld()?.textContent ?? ''}\n`, 'io-system');
   worldSelect.addEventListener('change', showWorld);
   showWorld();
-})();
-</script>
+};
