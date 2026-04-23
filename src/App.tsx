@@ -20,11 +20,12 @@ function Layout({ children }: { children: ReactNode }) {
     <div className="aha-shell">
       <header className="site-brand">
         <img src="/img/ackmud_logo_transparent.png" alt="ACKMUD logo" />
-        <p>ACKmud Historical Archive - Preservation and interpretation of an enduring text-world tradition.</p>
+        <p>ACKmud.com archive sections: preserved worlds, reference material, and live browser access.</p>
       </header>
 
       <nav className="site-nav">
-        <NavLink to="/" end>Home</NavLink>
+        <a href="/">Home</a>
+        <NavLink to="/archive">Archive</NavLink>
         <NavLink to="/acktng">ACK!TNG</NavLink>
         <NavLink to="/acktng/who">Who</NavLink>
         <NavLink to="/acktng/mud">MUD Client</NavLink>
@@ -32,7 +33,6 @@ function Layout({ children }: { children: ReactNode }) {
         <NavLink to="/acktng/reference">Reference</NavLink>
         <a href="https://discord.gg/T24UQV8h" target="_blank" rel="noreferrer">Discord</a>
         <a href="https://github.com/ackmudhistoricalarchive" target="_blank" rel="noreferrer">GitHub</a>
-        <a href="https://ackmud.com/" target="_blank" rel="noreferrer">World of Lore</a>
       </nav>
 
       <main>{children}</main>
@@ -41,16 +41,14 @@ function Layout({ children }: { children: ReactNode }) {
 }
 
 function HomePage() {
-  useDocumentTitle('ACKmud Historical Archive');
+  useDocumentTitle('Archive - ACKmud.com');
 
   return (
     <>
-      <h1>ACKmud Historical Archive</h1>
+      <h1>Historical Archive</h1>
       <p>
-        The ACKmud Historical Archive is a long-horizon preservation and interpretation effort for one of the enduring
-        text-world traditions: the ACK code lineage and the living worlds that grew from it. This project is not just a file dump;
-        it is a curated record of worldbuilding decisions, game-system evolution, social history, and technical craft spanning
-        years of iterative development.
+        The ACKmud Historical Archive is the preservation wing of ACKmud.com. It documents the ACK code lineage and the
+        living worlds that grew from it through preserved game assets, reference text, running servers, and historical context.
       </p>
 
       <div className="grid">
@@ -103,14 +101,14 @@ function HomePage() {
 
       <p className="muted footer-copy">
         This archive is intended to remain useful decades from now: to support restoration, scholarly study, emulator efforts,
-        and renewed play. For the next generation of the world, visit <a href="https://ackmud.com/">AHA: World of Lore</a>.
+        and renewed play. The live front page and story sections remain at <a href="/">ackmud.com</a>.
       </p>
     </>
   );
 }
 
 function AcktngPage() {
-  useDocumentTitle('ACK!TNG - ACKmud Historical Archive');
+  useDocumentTitle('ACK!TNG - ACKmud.com');
 
   return (
     <>
@@ -170,7 +168,7 @@ function AcktngPage() {
 }
 
 function WhoPage() {
-  useDocumentTitle("Who's Online - ACKmud Historical Archive");
+  useDocumentTitle("Who's Online - ACKmud.com");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [whoHtml, setWhoHtml] = useState('');
@@ -234,7 +232,7 @@ function ReferencePage() {
     : 'help') as RefTab;
   const topic = params.topic;
 
-  useDocumentTitle('Reference - ACKmud Historical Archive');
+  useDocumentTitle('Reference - ACKmud.com');
 
   const [queryInput, setQueryInput] = useState('');
   const [query, setQuery] = useState('');
@@ -363,7 +361,7 @@ function ReferencePage() {
 }
 
 function WorldMapPage() {
-  useDocumentTitle('World Map - ACKmud Historical Archive');
+  useDocumentTitle('World Map - ACKmud.com');
   const [hover, setHover] = useState(false);
 
   return (
@@ -388,7 +386,7 @@ function WorldMapPage() {
 }
 
 function MudClientPage() {
-  useDocumentTitle('MUD Client - ACKmud Historical Archive');
+  useDocumentTitle('MUD Client - ACKmud.com');
 
   useEffect(() => {
     let mounted = true;
@@ -523,7 +521,7 @@ export default function App() {
     <BrowserRouter>
       <Layout>
         <Routes>
-          <Route path="/" element={<HomePage />} />
+          <Route path="/archive" element={<HomePage />} />
           <Route path="/acktng" element={<AcktngPage />} />
           <Route path="/acktng/who" element={<WhoPage />} />
           <Route path="/acktng/reference" element={<ReferencePage />} />

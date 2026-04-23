@@ -24,14 +24,13 @@ function fakeFetch(url) {
 function requestText(baseUrl, pathname, host) {
   const url = new URL(pathname, baseUrl);
   return new Promise((resolve, reject) => {
+    const headers = host ? { Host: host } : {};
     const req = http.request({
       hostname: url.hostname,
       port: url.port,
       path: url.pathname,
       method: 'GET',
-      headers: {
-        Host: host,
-      },
+      headers,
     }, (res) => {
       let body = '';
       res.setEncoding('utf8');
@@ -47,7 +46,7 @@ function requestText(baseUrl, pathname, host) {
   });
 }
 
-test('api endpoints match legacy behavior', async () => {
+test('api endpoints match merged-site behavior', async () => {
   const root = makeTempRoot();
   const helpDir = path.join(root, 'help');
   const shelpDir = path.join(root, 'shelp');
@@ -98,13 +97,17 @@ test('api endpoints match legacy behavior', async () => {
   assert.equal(spaResponse.status, 200);
   assert.match(await spaResponse.text(), /spa/);
 
-  const wolHome = await requestText(baseUrl, '/', 'ackmud.com');
+  const wolHome = await requestText(baseUrl, '/');
   assert.equal(wolHome.status, 200);
-  assert.match(wolHome.body, /World of Lore/);
+  assert.match(wolHome.body, /ACKmud\.com/);
 
-  const wolStories = await requestText(baseUrl, '/stories', 'ackmud.com');
+  const wolStories = await requestText(baseUrl, '/stories');
   assert.equal(wolStories.status, 200);
   assert.match(wolStories.body, /story-card/);
+
+  const archiveHome = await fetch(`${baseUrl}/archive`);
+  assert.equal(archiveHome.status, 200);
+  assert.match(await archiveHome.text(), /spa/);
 
   await new Promise((resolve, reject) => {
     server.close((error) => {
