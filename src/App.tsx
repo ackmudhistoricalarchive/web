@@ -32,7 +32,6 @@ function Layout({ children }: { children: ReactNode }) {
         <NavLink to="/acktng/reference">Reference</NavLink>
         <a href="https://discord.gg/T24UQV8h" target="_blank" rel="noreferrer">Discord</a>
         <a href="https://github.com/ackmudhistoricalarchive" target="_blank" rel="noreferrer">GitHub</a>
-        <a href="https://ackmud.com/" target="_blank" rel="noreferrer">World of Lore</a>
       </nav>
 
       <main>{children}</main>
@@ -103,7 +102,7 @@ function HomePage() {
 
       <p className="muted footer-copy">
         This archive is intended to remain useful decades from now: to support restoration, scholarly study, emulator efforts,
-        and renewed play. For the next generation of the world, visit <a href="https://ackmud.com/">AHA: World of Lore</a>.
+        and renewed play.
       </p>
     </>
   );

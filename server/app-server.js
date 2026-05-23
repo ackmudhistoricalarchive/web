@@ -41,11 +41,6 @@ const DEFAULT_MUD_WS_TARGETS = {
   ackfuss: { host: '10.1.0.250', port: 4000, name: 'ACK!FUSS' },
 };
 
-function isWolHost(hostHeader = '') {
-  const host = hostHeader.split(':')[0].toLowerCase();
-  return host === 'ackmud.com' || host === 'www.ackmud.com';
-}
-
 function envTarget(key, fallback) {
   const envKey = key.toUpperCase().replaceAll('-', '_');
   return {
@@ -343,37 +338,6 @@ function handleMudWebsocket(req, wsSocket, head, targets) {
   });
 }
 
-function renderWolPage(config, pageTitle, body, activePath) {
-  const navClass = (href) => href === activePath ? 'active' : '';
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${pageTitle}</title>
-    <link rel="stylesheet" href="/wol/site.css" />
-  </head>
-  <body>
-    <div class="site-shell">
-      <header class="site-brand">
-        <h2>World of Lore</h2>
-        <p>A living world forged in text and tradition.</p>
-      </header>
-      <nav class="site-nav">
-        <a class="${navClass('/')}" href="/">Home</a>
-        <a class="${navClass('/stories')}" href="/stories">Stories</a>
-        <a href="https://discord.gg/T24UQV8h" target="_blank" rel="noopener noreferrer">Discord</a>
-        <a href="https://aha.ackmud.com/" target="_blank" rel="noopener noreferrer">Historical Archive</a>
-      </nav>
-      <main>
-${body}
-      </main>
-    </div>
-    <script src="/wol/stories.js"></script>
-  </body>
-</html>`;
-}
-
 export function createAppServer(options = {}) {
   const config = {
     ...envConfig(),
@@ -389,22 +353,9 @@ export function createAppServer(options = {}) {
 
     const url = new URL(req.url, 'http://localhost');
     const pathname = decodeURIComponent(url.pathname);
-    const wolHost = isWolHost(req.headers.host);
 
     if (pathname === '/health') {
       send(res, 200, 'ok\n', 'text/plain; charset=utf-8');
-      return;
-    }
-
-    if (wolHost && pathname === '/') {
-      const body = readPublicFile(config.publicDir, 'wol/home.content.html');
-      send(res, 200, renderWolPage(config, 'AHA: World of Lore', body, '/'), 'text/html; charset=utf-8');
-      return;
-    }
-
-    if (wolHost && pathname === '/stories') {
-      const body = readPublicFile(config.publicDir, 'wol/stories.content.html');
-      send(res, 200, renderWolPage(config, 'Tales from the Age of Monuments - AHA: World of Lore', body, '/stories'), 'text/html; charset=utf-8');
       return;
     }
 
