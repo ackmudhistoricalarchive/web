@@ -12,13 +12,29 @@ function makeTempRoot() {
 }
 
 function fakeFetch(url) {
-  if (url.endsWith('/who')) {
+  const requestUrl = String(url);
+  if (requestUrl.endsWith('/who')) {
     return Promise.resolve(new Response('<h2>Players Online</h2><ul><li>Gandalf</li></ul>'));
   }
-  if (url.endsWith('/gsgp')) {
+  if (requestUrl.endsWith('/gsgp')) {
     return Promise.resolve(new Response('{"name":"ACK!MUD TNG","active_players":1,"leaderboards":[]}'));
   }
-  throw new Error(`unexpected url ${url}`);
+  if (requestUrl.endsWith('/helps')) {
+    return Promise.resolve(Response.json([{ id: 7, keyword: 'fire burn', title: 'Fire', level: 0, text: 'Fire burns things.' }]));
+  }
+  if (requestUrl.endsWith('/helps/7')) {
+    return Promise.resolve(Response.json({ id: 7, keyword: 'fire burn', title: 'Fire', level: 0, text: 'Fire burns things.' }));
+  }
+  if (requestUrl.endsWith('/lores/9')) {
+    return Promise.resolve(Response.json({
+      id: 9,
+      name: 'Dragon',
+      keyword: 'dragon',
+      description: 'Scaled histories.',
+      entries: [{ id: 1, seq: 1, keyword: '0', text: 'Dragons breathe fire.' }],
+    }));
+  }
+  throw new Error(`unexpected url ${requestUrl}`);
 }
 
 function requestText(baseUrl, pathname, host) {
@@ -78,13 +94,17 @@ test('api endpoints match legacy behavior', async () => {
   assert.match(await gsgpResponse.text(), /active_players/);
 
   const indexResponse = await fetch(`${baseUrl}/api/reference/help`);
-  assert.deepEqual(await indexResponse.json(), ['fire']);
+  assert.deepEqual(await indexResponse.json(), [{ id: '7', label: 'Fire', description: '' }]);
 
-  const topicResponse = await fetch(`${baseUrl}/api/reference/help/fire`);
-  assert.equal(await topicResponse.text(), 'Fire burns things.');
+  const topicResponse = await fetch(`${baseUrl}/api/reference/help/7`);
+  assert.deepEqual(await topicResponse.json(), { id: '7', label: 'Fire', content: 'Fire burns things.' });
 
-  const loreResponse = await fetch(`${baseUrl}/api/reference/lore/dragon`);
-  assert.equal(await loreResponse.text(), 'Dragons breathe fire.');
+  const loreResponse = await fetch(`${baseUrl}/api/reference/lore/9`);
+  assert.deepEqual(await loreResponse.json(), {
+    id: '9',
+    label: 'Dragon',
+    content: 'Scaled histories.\n\nDragons breathe fire.',
+  });
 
   const traversalResponse = await fetch(`${baseUrl}/api/reference/help/..%2F..%2Fetc%2Fpasswd`);
   assert.equal(traversalResponse.status, 404);
