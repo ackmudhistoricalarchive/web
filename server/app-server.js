@@ -62,6 +62,7 @@ function envConfig() {
     port: Number(process.env.PORT ?? '5000'),
     staticDir: process.env.STATIC_DIR ?? path.join(repoRoot, 'dist'),
     gameUrl: process.env.ACKTNG_GAME_URL ?? 'http://10.1.0.241:8080',
+    contentApiUrl: process.env.TNGDB_API_URL ?? 'http://10.1.0.249:8000',
     helpDir: process.env.HELP_DIR ?? path.join(acktngDir, 'help'),
     shelpDir: process.env.SHELP_DIR ?? path.join(acktngDir, 'shelp'),
     loreDir: process.env.LORE_DIR ?? path.join(acktngDir, 'lore'),
@@ -96,6 +97,14 @@ async function fetchUpstream(url, fallbackBody, contentType, fetchFn) {
   }
 }
 
+async function fetchJson(url, fetchFn) {
+  const response = await fetchFn(url, { signal: AbortSignal.timeout(3000) });
+  if (!response.ok) {
+    throw new Error(`upstream returned ${response.status}`);
+  }
+  return response.json();
+}
+
 function serveStatic(res, staticDir, pathname) {
   const requested = pathname === '/' ? '/index.html' : pathname;
   const candidate = path.resolve(staticDir, `.${requested}`);
@@ -120,6 +129,62 @@ function serveStatic(res, staticDir, pathname) {
 
 function readPublicFile(publicDir, relPath) {
   return fs.readFileSync(path.join(publicDir, relPath), 'utf8');
+}
+
+function referenceApiPath(type) {
+  if (type === 'shelp') return 'shelps';
+  if (type === 'lore') return 'lores';
+  return 'helps';
+}
+
+function referenceLabel(item) {
+  return item.title ?? item.name ?? item.keyword ?? item.keywords ?? item.filename ?? String(item.id);
+}
+
+function normalizeReferenceItem(item) {
+  return {
+    id: String(item.id ?? item.filename ?? item.keyword ?? item.name ?? item.title),
+    label: referenceLabel(item),
+    description: item.description ?? '',
+  };
+}
+
+function referenceContent(type, item) {
+  if (type === 'lore') {
+    const parts = [];
+    if (item.description) {
+      parts.push(item.description);
+    }
+    if (Array.isArray(item.entries)) {
+      parts.push(...item.entries.map((entry) => entry.text ?? entry.body ?? '').filter(Boolean));
+    }
+    return parts.join('\n\n').trim();
+  }
+  return (item.text ?? item.body ?? '').trim();
+}
+
+async function fetchReferenceIndex(config, type, query, fetchFn) {
+  const endpoint = referenceApiPath(type);
+  const url = new URL(`${config.contentApiUrl.replace(/\/+$/, '')}/${endpoint}`);
+  if (query) {
+    url.searchParams.set('keyword', query);
+  }
+  const body = await fetchJson(url, fetchFn);
+  if (!Array.isArray(body)) {
+    throw new Error('reference index was not an array');
+  }
+  return body.map(normalizeReferenceItem);
+}
+
+async function fetchReferenceTopic(config, type, topic, fetchFn) {
+  const endpoint = referenceApiPath(type);
+  const url = `${config.contentApiUrl.replace(/\/+$/, '')}/${endpoint}/${encodeURIComponent(topic)}`;
+  const body = await fetchJson(url, fetchFn);
+  return {
+    id: String(body.id ?? topic),
+    label: referenceLabel(body),
+    content: referenceContent(type, body),
+  };
 }
 
 function resolveWsTarget(pathname, targets) {
@@ -373,15 +438,30 @@ export function createAppServer(options = {}) {
 
     const referenceIndexMatch = pathname.match(/^\/api\/reference\/([^/]+)$/);
     if (referenceIndexMatch) {
-      const dir = resolveRefDir(referenceIndexMatch[1], config.helpDir, config.shelpDir, config.loreDir);
-      const items = listTopics(dir, url.searchParams.get('q') ?? '');
-      send(res, 200, JSON.stringify(items), 'application/json');
+      const type = referenceIndexMatch[1];
+      const query = url.searchParams.get('q') ?? '';
+      try {
+        const items = await fetchReferenceIndex(config, type, query, fetchFn);
+        send(res, 200, JSON.stringify(items), 'application/json');
+      } catch {
+        const dir = resolveRefDir(type, config.helpDir, config.shelpDir, config.loreDir);
+        const items = listTopics(dir, query).map((name) => ({ id: name, label: name, description: '' }));
+        send(res, 200, JSON.stringify(items), 'application/json');
+      }
       return;
     }
 
     const referenceTopicMatch = pathname.match(/^\/api\/reference\/([^/]+)\/(.+)$/);
     if (referenceTopicMatch) {
       const [, type, topic] = referenceTopicMatch;
+      try {
+        const item = await fetchReferenceTopic(config, type, topic, fetchFn);
+        send(res, 200, JSON.stringify(item), 'application/json');
+        return;
+      } catch {
+        // Fall back to the legacy filesystem layout below.
+      }
+
       const dir = resolveRefDir(type, config.helpDir, config.shelpDir, config.loreDir);
       const filePath = safeTopicPath(dir, topic);
       if (!filePath) {
@@ -393,7 +473,7 @@ export function createAppServer(options = {}) {
       if (type === 'lore') {
         content = extractFirstLoreEntry(content);
       }
-      send(res, 200, content, 'text/plain; charset=utf-8');
+      send(res, 200, JSON.stringify({ id: topic, label: topic, content }), 'application/json');
       return;
     }
 

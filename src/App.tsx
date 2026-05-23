@@ -9,6 +9,16 @@ declare global {
 
 type RefTab = 'help' | 'shelp' | 'lore';
 
+type ReferenceItem = {
+  id: string;
+  label: string;
+  description?: string;
+};
+
+type ReferenceTopic = ReferenceItem & {
+  content: string;
+};
+
 function useDocumentTitle(title: string) {
   useEffect(() => {
     document.title = title;
@@ -174,6 +184,7 @@ function WhoPage() {
   const [error, setError] = useState(false);
   const [whoHtml, setWhoHtml] = useState('');
   const playerCount = useMemo(() => (whoHtml.match(/<li>/g) ?? []).length, [whoHtml]);
+  const hasPlayers = !error && playerCount > 0;
 
   useEffect(() => {
     let active = true;
@@ -214,7 +225,11 @@ function WhoPage() {
       ) : (
         <>
           <p>Players online: {error ? 0 : playerCount}</p>
-          <div dangerouslySetInnerHTML={{ __html: whoHtml }} />
+          {hasPlayers ? (
+            <div dangerouslySetInnerHTML={{ __html: whoHtml }} />
+          ) : (
+            <p className="muted">No players online right now.</p>
+          )}
         </>
       )}
     </>
@@ -237,9 +252,9 @@ function ReferencePage() {
 
   const [queryInput, setQueryInput] = useState('');
   const [query, setQuery] = useState('');
-  const [topics, setTopics] = useState<string[]>([]);
+  const [topics, setTopics] = useState<ReferenceItem[]>([]);
   const [indexLoading, setIndexLoading] = useState(true);
-  const [topicContent, setTopicContent] = useState<string | null>(null);
+  const [topicContent, setTopicContent] = useState<ReferenceTopic | null>(null);
   const [topicLoading, setTopicLoading] = useState(false);
 
   useEffect(() => {
@@ -257,7 +272,7 @@ function ReferencePage() {
         try {
           const response = await fetch(`/api/reference/${activeTab}/${encodeURIComponent(topic)}`);
           if (response.ok && active) {
-            setTopicContent(await response.text());
+            setTopicContent(await response.json() as ReferenceTopic);
           }
         } finally {
           if (active) {
@@ -276,7 +291,7 @@ function ReferencePage() {
       try {
         const suffix = query ? `?q=${encodeURIComponent(query)}` : '';
         const response = await fetch(`/api/reference/${activeTab}${suffix}`);
-        const body = await response.json() as string[];
+        const body = await response.json() as ReferenceItem[];
         if (active) {
           setTopics(body);
         }
@@ -315,9 +330,9 @@ function ReferencePage() {
           <p className="muted">Loading...</p>
         ) : topicContent !== null ? (
           <>
-            <h1>{tabLabel(activeTab)}: {topic}</h1>
+            <h1>{tabLabel(activeTab)}: {topicContent.label}</h1>
             <p><NavLink to={`/acktng/reference/${activeTab}`}>Back to {tabLabel(activeTab)} index</NavLink></p>
-            <pre>{topicContent}</pre>
+            <pre>{topicContent.content}</pre>
           </>
         ) : (
           <p className="muted">Topic not found.</p>
@@ -348,8 +363,9 @@ function ReferencePage() {
               {query ? <p>Filtered by <strong>{query}</strong>.</p> : null}
               <ul>
                 {topics.map(item => (
-                  <li key={item}>
-                    <NavLink to={`/acktng/reference/${activeTab}/${item}`}>{item}</NavLink>
+                  <li key={item.id}>
+                    <NavLink to={`/acktng/reference/${activeTab}/${item.id}`}>{item.label}</NavLink>
+                    {item.description ? <p className="muted">{item.description}</p> : null}
                   </li>
                 ))}
               </ul>
