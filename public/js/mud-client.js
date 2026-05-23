@@ -954,7 +954,12 @@ window.mudClientInit = () => {
   const defaultWsUrl  = () => {
     const w = selectedWorld();
     if (!w) return '';
-    if (w.dataset.ws) return w.dataset.ws;
+    if (w.dataset.ws) {
+      const endpoint = new URL(w.dataset.ws, window.location.href);
+      if (endpoint.protocol === 'http:') endpoint.protocol = 'ws:';
+      if (endpoint.protocol === 'https:') endpoint.protocol = 'wss:';
+      return endpoint.toString();
+    }
     return `${w.dataset.scheme}://${w.dataset.host}:${w.dataset.port}/`;
   };
 

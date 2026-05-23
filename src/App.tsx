@@ -89,7 +89,7 @@ function HomePage() {
       <h2>ACK!TNG - Final Release</h2>
       <p>
         ACK!TNG (The Next Generation) has reached its final release and is now fully archived here. The servers remain
-        accessible for play via the <NavLink to="/acktng/mud">MUD Client</NavLink> - ACK!TNG, ACK! 4.3.1, and ACK! 4.2 are all
+        accessible for play via the <NavLink to="/acktng/mud">MUD Client</NavLink> - ACK!TNG and the historical worlds are
         available.
       </p>
 
@@ -125,7 +125,7 @@ function AcktngPage() {
         <section className="card">
           <h2>Play</h2>
           <p>
-            Connect to ACK!TNG, ACK! 4.3.1, or ACK! 4.2 directly from your browser using the
+            Connect to ACK!TNG and the historical worlds directly from your browser using the
             <NavLink to="/acktng/mud"> MUD Client</NavLink> - no downloads required.
           </p>
         </section>
@@ -427,9 +427,12 @@ function MudClientPage() {
         <div className="mud-controls">
           <label htmlFor="world-select">World</label>
           <select id="world-select" defaultValue="acktng">
-            <option value="acktng" data-host="ackmud.com" data-port="18890" data-scheme="wss">ACK!TNG (ackmud.com:18890)</option>
-            <option value="ack431" data-host="ackmud.com" data-port="8891" data-scheme="ws">ACK! 4.3.1 (ackmud.com:8891)</option>
-            <option value="ack42" data-host="ackmud.com" data-port="8892" data-scheme="ws">ACK! 4.2 (ackmud.com:8892)</option>
+            <option value="acktng" data-ws="/ws/acktng">ACK!TNG</option>
+            <option value="ack431" data-ws="/ws/ack431">ACK! 4.3.1</option>
+            <option value="ack42" data-ws="/ws/ack42">ACK! 4.2</option>
+            <option value="ack41" data-ws="/ws/ack41">ACK! 4.1</option>
+            <option value="assault" data-ws="/ws/assault">Assault 3.0</option>
+            <option value="ackfuss" data-ws="/ws/ackfuss">ACK!FUSS</option>
           </select>
           <button id="connect-btn" type="button">Connect</button>
           <button id="disconnect-btn" type="button">Disconnect</button>
